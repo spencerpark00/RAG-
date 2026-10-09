@@ -5,3 +5,4 @@ __pycache__/
 answer_results*.jsonl
 eval_report*.md
 embeddings.json
+feedback.jsonl

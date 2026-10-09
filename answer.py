@@ -127,6 +127,27 @@ def language_issues(answer, allowed_text):
     return issues
 
 
+def stream_ollama(messages, model=MODEL, timeout=600):
+    """Ollama 스트리밍: 토큰이 생성되는 대로 조각(str)을 yield 한다. 웹 화면용."""
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "options": {"temperature": 0, "num_ctx": 4096},
+    }
+    req = urllib.request.Request(
+        OLLAMA_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        for line in resp:  # 줄마다 JSON 하나: {"message": {"content": "조각"}, "done": false}
+            if line.strip():
+                piece = json.loads(line)
+                if piece.get("message", {}).get("content"):
+                    yield fix_punct(piece["message"]["content"])
+
+
 def answer(question, retriever, llm=call_ollama, k=TOP_K, version=DEFAULT_PROMPT):
     chunks = retriever.search(question, k=k)
     messages = build_messages(question, chunks, version)

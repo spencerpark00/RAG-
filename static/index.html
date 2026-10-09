@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>한빛 업무지식 Assistant</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f1f3f6; --line: #e3e6eb;
+  --text: #16181d; --muted: #6b7280; --brand: #2f5bea; --brand-soft: #e8eefe;
+  --ok: #16794c; --ok-soft: #e3f4ea; --bad: #b42318; --bad-soft: #fdecea; --neutral-soft: #eef0f3;
+  --user: #2f5bea; --user-text: #fff; --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1115; --panel: #171a21; --panel-2: #1e222b; --line: #2a2f3a;
+    --text: #e8eaee; --muted: #9aa3b2; --brand: #7c9cff; --brand-soft: #1f2a4d;
+    --ok: #5fd39a; --ok-soft: #133224; --bad: #ff8a80; --bad-soft: #3a1714; --neutral-soft: #262b35;
+    --user: #3b63e6; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1115; --panel: #171a21; --panel-2: #1e222b; --line: #2a2f3a;
+  --text: #e8eaee; --muted: #9aa3b2; --brand: #7c9cff; --brand-soft: #1f2a4d;
+  --ok: #5fd39a; --ok-soft: #133224; --bad: #ff8a80; --bad-soft: #3a1714; --neutral-soft: #262b35;
+  --user: #3b63e6; --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+}
+button, select, textarea { font: inherit; color: inherit; }
+
+/* ---------- 상단 바 ---------- */
+.top {
+  height: 60px; display: flex; align-items: center; gap: 12px; padding: 0 20px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.logo { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--brand), #8b5cf6);
+  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px; }
+.top h1 { font-size: 16px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
+.top .sub { color: var(--muted); font-size: 13px; }
+.spacer { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  background: var(--panel-2); color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+.ctrl { border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+.ctrl:hover { background: var(--panel-2); }
+.ctrl.icon { display: inline-grid; place-items: center; width: 34px; height: 32px; padding: 0; }
+.ctrl, .top h1 { white-space: nowrap; }
+.only-mobile { display: none; }
+
+/* ---------- 레이아웃 ---------- */
+.app { height: calc(100% - 60px); display: grid; grid-template-columns: minmax(0, 1fr) 400px; }
+.chat { display: flex; flex-direction: column; min-width: 0; }
+.messages { flex: 1; overflow-y: auto; padding: 28px 24px 12px; }
+.inner { max-width: 760px; margin: 0 auto; }
+
+/* 빈 화면 */
+.empty { text-align: center; padding: 8vh 0 0; }
+.empty h2 { font-size: 24px; margin: 14px 0 6px; letter-spacing: -.02em; }
+.empty p { color: var(--muted); margin: 0 0 24px; }
+.examples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; text-align: left; }
+.example { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 12px 14px;
+  cursor: pointer; box-shadow: var(--shadow); transition: border-color .15s, transform .15s; }
+.example:hover { border-color: var(--brand); transform: translateY(-1px); }
+.example b { display: block; font-size: 12px; color: var(--brand); font-weight: 600; margin-bottom: 2px; }
+
+/* 메시지 */
+.msg { margin: 0 0 20px; display: flex; }
+.msg.user { justify-content: flex-end; }
+.bubble-user { background: var(--user); color: var(--user-text); padding: 10px 14px; border-radius: 16px 16px 4px 16px;
+  max-width: 80%; white-space: pre-wrap; word-break: break-word; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 4px 16px 16px 16px; padding: 14px 16px;
+  box-shadow: var(--shadow); max-width: 92%; min-width: 0; cursor: pointer; transition: border-color .15s; }
+.card.active { border-color: var(--brand); }
+.card.refused { background: var(--panel-2); }
+.answer { white-space: pre-wrap; word-break: break-word; }
+.cursor::after { content: ""; display: inline-block; width: 7px; height: 1.05em; margin-left: 2px; vertical-align: -2px;
+  background: var(--brand); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.thinking { color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--brand); border-radius: 50%;
+  animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.notice { display: flex; gap: 8px; align-items: flex-start; color: var(--muted); font-size: 13.5px; margin-top: 8px; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; padding-top: 10px;
+  border-top: 1px dashed var(--line); font-size: 12.5px; color: var(--muted); }
+.cite { border: 1px solid var(--line); background: var(--panel-2); border-radius: 6px; padding: 1px 7px; cursor: pointer;
+  font-variant-numeric: tabular-nums; }
+.cite:hover { border-color: var(--brand); color: var(--brand); }
+.icon-btn { border: 0; background: transparent; cursor: pointer; padding: 3px 6px; border-radius: 6px; color: var(--muted); }
+.icon-btn:hover { background: var(--panel-2); color: var(--text); }
+.icon-btn.on { color: var(--brand); background: var(--brand-soft); }
+.error { color: var(--bad); }
+
+/* 입력창 */
+.composer { padding: 12px 24px 20px; }
+.box { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 16px; padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }
+.box:focus-within { border-color: var(--brand); }
+textarea { flex: 1; border: 0; outline: 0; resize: none; background: transparent; max-height: 160px; padding: 6px 0; }
+.send { border: 0; background: var(--brand); color: #fff; border-radius: 11px; height: 38px; min-width: 38px; padding: 0 14px;
+  cursor: pointer; font-weight: 600; }
+.send:disabled { opacity: .4; cursor: default; }
+.hint { max-width: 760px; margin: 6px auto 0; font-size: 12px; color: var(--muted); text-align: center; }
+
+/* ---------- 근거 패널 ---------- */
+.side { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.side-head { padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
+.side-head h3 { margin: 0; font-size: 14px; }
+.side-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+.sources { flex: 1; overflow-y: auto; padding: 12px; }
+.src { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; background: var(--panel); }
+.src.cited { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.src.flash { animation: flash 1.2s; }
+@keyframes flash { 0% { background: var(--brand-soft); } 100% { background: var(--panel); } }
+.src-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.badge { font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+.badge.cur { color: var(--ok); background: var(--ok-soft); }
+.badge.old { color: var(--bad); background: var(--bad-soft); }
+.badge.na { color: var(--muted); background: var(--neutral-soft); }
+.badge.used { color: var(--brand); background: var(--brand-soft); }
+.src-title { font-weight: 600; font-size: 14px; margin: 6px 0 2px; }
+.src-sec { font-size: 13px; color: var(--muted); }
+.src details { margin-top: 8px; }
+.src summary { cursor: pointer; font-size: 12.5px; color: var(--brand); }
+.src-body { font-size: 13px; margin-top: 8px; white-space: pre-wrap; word-break: break-word; }
+.src-body table { border-collapse: collapse; width: 100%; font-size: 12.5px; white-space: normal; margin: 4px 0; }
+.src-body td, .src-body th { border: 1px solid var(--line); padding: 4px 6px; text-align: left; }
+.src-body th { background: var(--panel-2); }
+.old-warn { margin-top: 8px; font-size: 12px; color: var(--bad); }
+.side-empty { color: var(--muted); font-size: 13.5px; text-align: center; padding: 40px 16px; }
+
+@media (max-width: 960px) {
+  .app { grid-template-columns: 1fr; }
+  .side { position: fixed; inset: 60px 0 0 auto; width: min(420px, 100%); transform: translateX(100%);
+    transition: transform .2s; z-index: 5; visibility: hidden; }
+  .side.open { transform: none; visibility: visible; box-shadow: -8px 0 24px rgba(0,0,0,.12); }
+  .only-mobile { display: inline-flex; }
+  .top .sub, .pill .label { display: none; }
+  .top h1 .full { display: none; }
+}
+@media (max-width: 560px) {
+  .messages { padding: 18px 16px 8px; } .composer { padding: 8px 16px 14px; }
+  .examples { grid-template-columns: 1fr; }
+  .top { padding: 0 16px; gap: 8px; } .top h1 { font-size: 15px; }
+  .pill { display: none; } .ctrl { padding: 6px 8px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">한</div>
+  <div>
+    <h1>업무지식<span class="full"> Assistant</span></h1>
+  </div>
+  <span class="sub">한빛텔레콤 고객센터 · 문서 근거 기반 답변</span>
+  <div class="spacer"></div>
+  <span class="pill" id="status"><span class="dot"></span><span class="label">연결 확인 중</span></span>
+  <select class="ctrl" id="retriever" title="검색 방식"></select>
+  <button class="ctrl icon" id="theme" title="테마 전환" aria-label="테마 전환"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+  <button class="ctrl only-mobile" id="toggleSide">근거</button>
+</header>
+
+<main class="app">
+  <section class="chat">
+    <div class="messages" id="messages">
+      <div class="inner" id="thread">
+        <div class="empty" id="empty">
+          <div class="logo" style="width:44px;height:44px;margin:0 auto;font-size:20px;border-radius:13px">한</div>
+          <h2>무엇을 찾아드릴까요?</h2>
+          <p>요금제·약정·해지·로밍 등 상담 규정을 문서 근거와 함께 답합니다.</p>
+          <div class="examples" id="examples"></div>
+        </div>
+      </div>
+    </div>
+    <div class="composer">
+      <div class="box">
+        <textarea id="input" rows="1" placeholder="질문을 입력하세요 (Enter 전송, Shift+Enter 줄바꿈)"></textarea>
+        <button class="send" id="send" disabled>전송</button>
+      </div>
+      <div class="hint">답변은 등록된 문서에서만 생성되며, 근거가 없으면 "확인할 수 없습니다"라고 답합니다.</div>
+    </div>
+  </section>
+
+  <aside class="side" id="side">
+    <div class="side-head">
+      <h3>근거 문서</h3>
+      <p id="sideMeta">답변을 선택하면 검색된 문서가 표시됩니다.</p>
+    </div>
+    <div class="sources" id="sources"><div class="side-empty">아직 질문이 없습니다.</div></div>
+  </aside>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const EXAMPLES = [
+  ["요금제", "5G 스탠다드 요금제 월정액은 얼마인가요?"],
+  ["약정", "선택약정 할인율과 약정 기간 선택지는?"],
+  ["로밍", "현재 하루 로밍 패스 요금과 제공 데이터는?"],
+  ["장애", "장애 보상 대상이 되려면 몇 시간 이상 끊겨야 하나요?"],
+];
+const turns = [];        // {question, answer, chunks, cited, retriever, el}
+let activeTurn = null;
+let controller = null;
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// ---------- 테마 ----------
+(function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem("theme"); } catch (e) {}
+  if (saved) document.documentElement.dataset.theme = saved;
+  $("theme").onclick = () => {
+    const dark = document.documentElement.dataset.theme
+      ? document.documentElement.dataset.theme === "dark"
+      : matchMedia("(prefers-color-scheme: dark)").matches;
+    const next = dark ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("theme", next); } catch (e) {}
+  };
+})();
+
+// ---------- 상태 확인 ----------
+async function loadHealth() {
+  const pill = $("status");
+  try {
+    const h = await (await fetch("/api/health")).json();
+    $("retriever").innerHTML = h.retrievers.map((m) =>
+      `<option value="${m}" ${m === h.default_retriever ? "selected" : ""}>${{ bm25: "키워드(BM25)", vector: "의미(벡터)", hybrid: "하이브리드" }[m]}</option>`).join("");
+    pill.innerHTML = h.ollama.ok
+      ? `<span class="dot ok"></span><span class="label">${esc(h.llm)} · 문서 ${h.chunks}청크</span>`
+      : `<span class="dot bad"></span><span class="label">Ollama 연결 안 됨</span>`;
+  } catch (e) {
+    pill.innerHTML = `<span class="dot bad"></span><span class="label">서버 연결 안 됨</span>`;
+  }
+}
+
+// ---------- 근거 패널 ----------
+function statusBadge(s) {
+  if (s === "현행") return `<span class="badge cur">현행</span>`;
+  if (s === "폐지") return `<span class="badge old">폐지</span>`;
+  return `<span class="badge na">상태 미표기</span>`;
+}
+function renderBody(text) {
+  // 머리말 첫 줄은 카드 제목과 중복이라 빼고, 마크다운 표는 <table>로
+  const lines = text.split("\n").slice(1);
+  let html = "", table = [];
+  const flush = () => {
+    if (!table.length) return;
+    const rows = table.filter((r) => !/^\|\s*-/.test(r)).map((r) => r.replace(/^\||\|$/g, "").split("|").map((c) => esc(c.trim())));
+    html += "<table>" + rows.map((r, i) => "<tr>" + r.map((c) => i === 0 ? `<th>${c}</th>` : `<td>${c}</td>`).join("") + "</tr>").join("") + "</table>";
+    table = [];
+  };
+  for (const l of lines) { if (l.trim().startsWith("|")) table.push(l.trim()); else { flush(); html += esc(l) + "\n"; } }
+  flush();
+  return html.trim();
+}
+function renderSources(turn) {
+  activeTurn = turn;
+  turns.forEach((t) => t.el?.classList.toggle("active", t === turn));
+  const box = $("sources");
+  if (!turn || !turn.chunks) { box.innerHTML = `<div class="side-empty">검색 중…</div>`; return; }
+  const label = { bm25: "키워드(BM25)", vector: "의미(벡터)", hybrid: "하이브리드" }[turn.retriever] || turn.retriever;
+  $("sideMeta").textContent = `“${turn.question.slice(0, 28)}${turn.question.length > 28 ? "…" : ""}” · ${label} 상위 ${turn.chunks.length}개`;
+  const cited = new Set(turn.cited || []);
+  box.innerHTML = turn.chunks.map((c, i) => `
+    <div class="src ${cited.has(c.chunk_id) ? "cited" : ""}" id="src-${esc(c.chunk_id)}">
+      <div class="src-top">
+        <span>#${i + 1}</span>${statusBadge(c.status)}
+        ${cited.has(c.chunk_id) ? `<span class="badge used">답변에 인용</span>` : ""}
+        <span>${esc(c.doc_id)}</span>${c.effective ? `<span>· ${esc(c.effective)}</span>` : ""}
+      </div>
+      <div class="src-title">${esc(c.title)}</div>
+      <div class="src-sec">${esc(c.section)} · <span title="검색 점수">${esc(c.chunk_id)}</span></div>
+      ${c.status === "폐지" ? `<div class="old-warn">⚠ 폐지된 규정입니다. 과거 시점 문의에만 사용하세요.</div>` : ""}
+      <details ${cited.has(c.chunk_id) ? "open" : ""}><summary>원문 보기</summary><div class="src-body">${renderBody(c.text)}</div></details>
+    </div>`).join("");
+}
+function focusSource(id) {
+  const el = document.getElementById("src-" + id);
+  if (!el) return;
+  $("side").classList.add("open");
+  el.querySelector("details").open = true;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+}
+
+// ---------- 메시지 ----------
+function addUser(text) {
+  $("empty")?.remove();
+  const div = document.createElement("div");
+  div.className = "msg user";
+  div.innerHTML = `<div class="bubble-user">${esc(text)}</div>`;
+  $("thread").appendChild(div);
+}
+function addAssistant(turn) {
+  const div = document.createElement("div");
+  div.className = "msg";
+  div.innerHTML = `<div class="card"><div class="thinking"><span class="spinner"></span>문서를 검색하는 중…</div></div>`;
+  $("thread").appendChild(div);
+  turn.el = div.querySelector(".card");
+  turn.el.onclick = (e) => { if (!e.target.closest("button")) renderSources(turn); };
+  return turn.el;
+}
+function scrollDown() { const m = $("messages"); m.scrollTop = m.scrollHeight; }
+
+function finishCard(turn, done) {
+  const card = turn.el;
+  card.classList.toggle("refused", done.refused);
+  const cites = (done.cited || []).map((id) => `<button class="cite" data-id="${esc(id)}">${esc(id)}</button>`).join("");
+  card.innerHTML = `
+    <div class="answer">${esc(done.answer.replace(/\s*\(근거:[^)]*\)/g, "").trim())}</div>
+    ${done.refused ? `<div class="notice">ⓘ 등록된 문서에서 근거를 찾지 못했습니다. 담당 부서 확인이 필요합니다.</div>` : ""}
+    <div class="meta">
+      ${cites ? `근거 ${cites} <span>·</span>` : ""}
+      <span>${done.seconds}초</span>
+      <span class="spacer"></span>
+      <button class="icon-btn" data-act="copy" title="복사">복사</button>
+      <button class="icon-btn" data-act="up" title="도움됨">👍</button>
+      <button class="icon-btn" data-act="down" title="도움 안 됨">👎</button>
+    </div>`;
+  card.querySelectorAll(".cite").forEach((b) => b.onclick = () => { renderSources(turn); focusSource(b.dataset.id); });
+  card.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
+    if (b.dataset.act === "copy") { try { await navigator.clipboard.writeText(done.answer); b.textContent = "복사됨"; } catch (e) {} return; }
+    card.querySelectorAll('[data-act="up"],[data-act="down"]').forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: turn.question, answer: done.answer, rating: b.dataset.act, retriever: turn.retriever }) });
+  });
+}
+
+// ---------- 전송 + 스트리밍(SSE) ----------
+async function ask(question) {
+  question = question.trim();
+  if (!question || controller) return;
+  $("input").value = ""; autosize(); setBusy(true);
+  addUser(question);
+  const turn = { question, retriever: $("retriever").value };
+  turns.push(turn);
+  const card = addAssistant(turn);
+  renderSources(turn);
+  scrollDown();
+
+  controller = new AbortController();
+  let answerEl = null;
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, retriever: turn.retriever }), signal: controller.signal,
+    });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const raw = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        const event = (raw.match(/^event: (.*)$/m) || [])[1];
+        const data = JSON.parse((raw.match(/^data: (.*)$/m) || [])[1] || "{}");
+        if (event === "sources") {
+          turn.chunks = data.chunks; turn.retriever = data.retriever;
+          if (activeTurn === turn) renderSources(turn);
+          card.innerHTML = `<div class="thinking"><span class="spinner"></span>문서 ${data.chunks.length}개를 읽고 답변을 작성하는 중…</div>`;
+        } else if (event === "token") {
+          if (!answerEl) { card.innerHTML = `<div class="answer cursor"></div>`; answerEl = card.querySelector(".answer"); }
+          answerEl.textContent += data.text;
+          scrollDown();
+        } else if (event === "done") {
+          turn.cited = data.cited; turn.answer = data.answer;
+          finishCard(turn, data);
+          if (activeTurn === turn) renderSources(turn);
+        } else if (event === "error") {
+          card.innerHTML = `<div class="error">${esc(data.message)}</div>`;
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name !== "AbortError") card.innerHTML = `<div class="error">요청 실패: ${esc(e.message)}</div>`;
+    else card.innerHTML += `<div class="notice">중단됨</div>`;
+  } finally {
+    controller = null; setBusy(false); scrollDown();
+  }
+}
+
+// ---------- 입력 ----------
+function setBusy(busy) {
+  const btn = $("send");
+  btn.textContent = busy ? "중단" : "전송";
+  btn.disabled = !busy && !$("input").value.trim();
+}
+function autosize() { const t = $("input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
+$("input").addEventListener("input", () => { autosize(); if (!controller) $("send").disabled = !$("input").value.trim(); });
+$("input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask($("input").value); }
+});
+$("send").onclick = () => controller ? controller.abort() : ask($("input").value);
+$("toggleSide").onclick = () => $("side").classList.toggle("open");
+$("examples").innerHTML = EXAMPLES.map(([tag, q]) => `<div class="example" data-q="${esc(q)}"><b>${tag}</b>${esc(q)}</div>`).join("");
+document.querySelectorAll(".example").forEach((el) => el.onclick = () => ask(el.dataset.q));
+loadHealth();
+</script>
+</body>
+</html>

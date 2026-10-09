@@ -19,6 +19,28 @@ python chat.py                   # Ollama 서버가 켜져 있어야 함 (curl l
 질문> /종료
 ```
 
+## 웹 화면으로 실행
+
+```bash
+pip install -r requirements.txt  # 처음 한 번 (fastapi, uvicorn)
+python server.py                 # → 브라우저에서 http://localhost:8000
+```
+
+- 왼쪽: 대화 (답이 한 글자씩 스트리밍), 근거 칩·복사·👍👎
+- 오른쪽: 근거 문서 패널 (현행/폐지 배지, 답변에 인용된 청크 강조, 원문·표 보기)
+- 상단: Ollama 연결 상태, 검색 방식(하이브리드/키워드/의미) 선택, 다크 모드
+- 👍👎 피드백은 `feedback.jsonl`에 쌓임 (평가 데이터로 재사용)
+
+```
+브라우저 (static/index.html)
+   │ POST /api/chat {question, retriever}
+   ▼
+server.py (FastAPI) ── SSE 스트림: sources → token… → done
+   │
+   ├ retrieve.py  검색 (서버 시작 때 한 번 로딩)
+   └ answer.py    프롬프트 조립 → Ollama 스트리밍 호출
+```
+
 ## 실행 구조
 
 ```
@@ -44,7 +66,7 @@ embeddings.json (55 × 1024차원) ──────────┘ ▼
 | 임베딩 | `embed.py` | 청크를 bge-m3로 1024차원 벡터로 바꿔 JSON 파일에 저장 | 벡터 DB(FAISS·pgvector 등), 문서 변경 시 증분 갱신 |
 | 검색 | `retrieve.py` | BM25 + 벡터 검색을 RRF로 합친 하이브리드 (`--retriever=bm25\|vector\|hybrid`) | 재순위(reranker), 메타데이터 필터(현행만 등) |
 | 생성 | `answer.py` | 자료 → 규칙 → 질문 순서의 프롬프트, 근거 없으면 "확인할 수 없습니다" | 더 큰 모델, 출처 링크, 권한별 문서 필터 |
-| 인터페이스 | `chat.py` | 터미널 대화 | 웹 UI·상담 시스템 연동 |
+| 인터페이스 | `chat.py`, `server.py` + `static/index.html` | 터미널 대화 / 웹 API(REST + SSE 스트리밍) + 화면 | 사내 인증(SSO), 권한별 문서 필터, 대화 기록 DB, 상담 시스템 연동 |
 | 평가 | `eval_retrieval.py`, `eval_answer.py` | 검색 적중(Hit@k)과 답변 정확성을 분리 채점 | 실제 상담 질문 세트, 사람 검수 |
 
 ## 평가 (30문항, 참고용)
