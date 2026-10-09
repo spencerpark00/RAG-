@@ -4,12 +4,13 @@
   1위 점수만 기록한다. 나중에 '모른다' 판정 임계값을 정할 때 참고용.
 - 근거 문서가 2개인 질문은 '하나라도(any)'와 '모두(all)'를 따로 센다.
 
-실행: python eval_retrieval.py
+실행: python eval_retrieval.py [--retriever=bm25|vector|hybrid]
 """
 import csv
+import sys
 from pathlib import Path
 
-from retrieve import BM25, load_chunks
+from retrieve import make_retriever, retriever_arg
 
 EVAL_PATH = Path(__file__).parent / "rag_dummy" / "eval_questions.csv"
 KS = (1, 3, 5)
@@ -21,14 +22,14 @@ def load_questions(path=EVAL_PATH):
 
 
 def main():
-    bm25 = BM25(load_chunks())
+    retriever = make_retriever(retriever_arg(sys.argv[1:]))
     questions = load_questions()
     hits_any = {k: 0 for k in KS}
     hits_all = {k: 0 for k in KS}
     answerable, rows = 0, []
 
     for q in questions:
-        results = bm25.search(q["질문"], k=max(KS))
+        results = retriever.search(q["질문"], k=max(KS))
         ranked_docs = [r["doc_no"] for r in results]
         gold = [d.strip() for d in q["근거문서번호"].split(",") if d.strip() != "-"]
         top = f"{results[0]['chunk_id']}({results[0]['score']})"
@@ -44,7 +45,7 @@ def main():
             hits_all[k] += all(d in ranked_docs[:k] for d in gold)
         rows.append((q["id"], q["유형"], ",".join(gold), first_rank or "미검색", top, " ".join(ranked_docs)))
 
-    print(f"## 검색 적중률 (근거 문서가 있는 {answerable}문항)\n")
+    print(f"## 검색 적중률 ({type(retriever).__name__}, 근거 문서가 있는 {answerable}문항)\n")
     print("| 지표 | " + " | ".join(f"Hit@{k}" for k in KS) + " |")
     print("|---|" + "---|" * len(KS))
     print("| any (근거 문서 하나라도) | " + " | ".join(f"{hits_any[k]}/{answerable}" for k in KS) + " |")

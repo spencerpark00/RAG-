@@ -4,3 +4,4 @@ __pycache__/
 .DS_Store
 answer_results*.jsonl
 eval_report*.md
+embeddings.json

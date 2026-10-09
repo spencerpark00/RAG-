@@ -2,7 +2,8 @@
 
 실행
   python chat.py          # Ollama 필요
-  python chat.py --fake   # Ollama 없이 흐름만 점검
+  python chat.py --fake   # Ollama 없이 흐름만 점검 (--retriever=bm25와 함께)
+  python chat.py --retriever=bm25   # 검색 방식 선택 (기본: embeddings.json 있으면 hybrid)
 
 명령: /근거 (직전 답변의 근거 원문), /종료
 매 질문은 독립적으로 처리한다 (이전 대화를 모델에 넣지 않음).
@@ -12,7 +13,7 @@ import time
 import urllib.error
 
 from answer import answer, call_ollama, fake_llm
-from retrieve import BM25, load_chunks
+from retrieve import make_retriever, retriever_arg
 
 
 def cited_chunks(result):
@@ -24,9 +25,9 @@ def cited_chunks(result):
 
 def main():
     llm = fake_llm if "--fake" in sys.argv else call_ollama
-    bm25 = BM25(load_chunks())
+    retriever = make_retriever(retriever_arg(sys.argv[1:]))
     last = None
-    print("한빛텔레콤 업무지식 검색 챗봇입니다. 질문을 입력하세요. (/근거, /종료)")
+    print(f"한빛텔레콤 업무지식 검색 챗봇입니다 (검색: {type(retriever).__name__}). 질문을 입력하세요. (/근거, /종료)")
 
     while True:
         try:
@@ -48,7 +49,7 @@ def main():
 
         start = time.time()
         try:
-            last = answer(question, bm25, llm=llm)
+            last = answer(question, retriever, llm=llm)
         except urllib.error.URLError:
             print("Ollama 서버에 연결할 수 없습니다. 'open -a Ollama' 또는 'ollama serve'로 서버를 켜 주세요.")
             continue

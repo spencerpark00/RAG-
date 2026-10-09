@@ -1,6 +1,6 @@
 """3단계: 근거 기반 답변 생성 (Ollama HTTP API, 표준 라이브러리만 사용)
 
-흐름: 질문 → BM25 상위 k개 청크 → 프롬프트 → qwen2.5:3b → 언어 검사(→ 1회 재작성)
+흐름: 질문 → 검색(하이브리드/BM25) 상위 k개 청크 → 프롬프트 → qwen2.5:3b → 언어 검사(→ 1회 재작성)
 
 실행
   python answer.py "질문"           # Ollama 호출 (맥에서)
@@ -12,7 +12,7 @@ import re
 import sys
 import urllib.request
 
-from retrieve import BM25, load_chunks
+from retrieve import make_retriever, retriever_arg
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = "qwen2.5:3b"
@@ -127,8 +127,8 @@ def language_issues(answer, allowed_text):
     return issues
 
 
-def answer(question, bm25, llm=call_ollama, k=TOP_K, version=DEFAULT_PROMPT):
-    chunks = bm25.search(question, k=k)
+def answer(question, retriever, llm=call_ollama, k=TOP_K, version=DEFAULT_PROMPT):
+    chunks = retriever.search(question, k=k)
     messages = build_messages(question, chunks, version)
     text = fix_punct(llm(messages))
     issues = language_issues(text, messages[1]["content"])
@@ -156,7 +156,7 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     llm = fake_llm if "--fake" in sys.argv else call_ollama
     question = " ".join(args) or "5G 스탠다드 요금제 월정액은 얼마인가요?"
-    result = answer(question, BM25(load_chunks()), llm=llm, version=version)
+    result = answer(question, make_retriever(retriever_arg(sys.argv[1:])), llm=llm, version=version)
     print(f"질문: {question}")
     print(f"검색: {', '.join(c['chunk_id'] for c in result['chunks'])}")
     print(f"\n{result['answer']}")

@@ -10,7 +10,8 @@
   python eval_answer.py                # 30문항 전체 (맥, Ollama 필요. i3 기준 수십 분 예상)
   python eval_answer.py Q08 Q14        # 일부만
   python eval_answer.py --fake         # Ollama 없이 흐름 점검
-  python eval_answer.py --prompt=v2b   # 프롬프트 버전 선택 (기본 v1)
+  python eval_answer.py --prompt=v2b   # 프롬프트 버전 선택 (기본 v2a)
+  python eval_answer.py --retriever=bm25  # 검색 방식 선택 (기본: embeddings.json 있으면 hybrid)
 결과: answer_results_<버전>.jsonl (전체 답변 원문 포함, 검수용)
 채점은 '근거: … / 답: …' 형식이면 '답:' 뒤만 본다 (인용문 속 숫자로 정답 처리되는 것 방지).
 """
@@ -22,7 +23,7 @@ from pathlib import Path
 
 from answer import DEFAULT_PROMPT, PROMPT_VERSIONS, answer, call_ollama, fake_llm
 from eval_retrieval import load_questions
-from retrieve import BM25, load_chunks
+from retrieve import make_retriever, retriever_arg
 
 ROOT = Path(__file__).parent
 REFUSAL = "확인할수없"  # 정규화 후 비교
@@ -84,14 +85,15 @@ def main():
     out_path = ROOT / f"answer_results_{version}.jsonl"
     ids = [a for a in sys.argv[1:] if a.startswith("Q")]
     llm = fake_llm if use_fake else call_ollama
-    bm25 = BM25(load_chunks())
+    retriever = make_retriever(retriever_arg(sys.argv[1:]))
+    mode = type(retriever).__name__
     questions = [q for q in load_questions() if not ids or q["id"] in ids]
 
     rows = []
     with out_path.open("w", encoding="utf-8") as f:
         for q in questions:
             start = time.time()
-            r = answer(q["질문"], bm25, llm=llm, version=version)
+            r = answer(q["질문"], retriever, llm=llm, version=version)
             secs = time.time() - start
             gold = [d.strip() for d in q["근거문서번호"].split(",") if d.strip() != "-"]
             got = [c["doc_no"] for c in r["chunks"]]
@@ -115,7 +117,7 @@ def main():
     answerable = [r for r in rows if r["유형"] != "답없음"]
     unanswerable = [r for r in rows if r["유형"] == "답없음"]
     refused = sum(1 for r in answerable if "거부함" in r["메모"] or "거부 문구" in r["메모"])
-    print(f"## 요약 (프롬프트 {version}, {n}문항)\n")
+    print(f"## 요약 (프롬프트 {version}, 검색 {mode}, {n}문항)\n")
     print("| 지표 | 값 |\n|---|---|")
     print(f"| 답 있는 질문 정답 | {sum(r['판정'] == '정답' for r in answerable)}/{len(answerable)} |")
     print(f"| 답 있는 질문 거부 (과잉 거부) | {refused}/{len(answerable)} |")
