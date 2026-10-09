@@ -59,7 +59,7 @@ EXAMPLES_V2D = f"""예시 1)
 답: {NO_ANSWER}"""
 
 PROMPT_VERSIONS = ("v1", "v2a", "v2b", "v2c", "v2d")
-DEFAULT_PROMPT = "v1"
+DEFAULT_PROMPT = "v2a"  # 실험 결과: experiments/prompt_v2.md
 
 # 단위·고유명사처럼 영문이어도 허용하는 토큰 (소문자)
 ALLOWED_LATIN = {"gb", "mb", "mbps", "kbps", "g", "p"}
@@ -109,9 +109,19 @@ def fake_llm(messages):
     return f"{first.group(2).lstrip('- ')}\n(근거: {first.group(1)})" if first else NO_ANSWER
 
 
+# 3b 모델이 자주 쓰는 중국어식 문장부호 → 한국어 문장부호 (내용은 바꾸지 않음).
+# 재작성 요청으로는 고쳐지지 않아서(실험에서 3건 모두 그대로) 후처리로 바꾼다.
+PUNCT_MAP = str.maketrans({"。": ".", "，": ",", "、": ",", "：": ":", "；": ";", "（": "(", "）": ")"})
+
+
+def fix_punct(text):
+    return text.translate(PUNCT_MAP)
+
+
 def language_issues(answer, allowed_text):
     """한국어 외 문자 검출: 한자·일본어 가나, 그리고 자료·질문에 없는 영단어."""
-    issues = re.findall(r"[㐀-䶿一-鿿぀-ヿ]+", answer)
+    # 한자(U+3400~, U+4E00~), 가나(U+3040~30FF), 중국어식 문장부호(。、「」 U+3001~303F, 전각 ，：)
+    issues = re.findall("[㐀-䶿一-鿿぀-ヿ、-〿，：]+", answer)
     allowed = {w.lower() for w in re.findall(r"[A-Za-z]+", allowed_text)} | ALLOWED_LATIN
     issues += [w for w in re.findall(r"[A-Za-z]+", answer) if w.lower() not in allowed]
     return issues
@@ -120,7 +130,7 @@ def language_issues(answer, allowed_text):
 def answer(question, bm25, llm=call_ollama, k=TOP_K, version=DEFAULT_PROMPT):
     chunks = bm25.search(question, k=k)
     messages = build_messages(question, chunks, version)
-    text = llm(messages)
+    text = fix_punct(llm(messages))
     issues = language_issues(text, messages[1]["content"])
     retried = False
     if issues:
@@ -130,7 +140,7 @@ def answer(question, bm25, llm=call_ollama, k=TOP_K, version=DEFAULT_PROMPT):
             {"role": "assistant", "content": text},
             {"role": "user", "content": f"위 답변에 한국어가 아닌 표현({', '.join(issues[:5])})이 있습니다. 같은 내용을 한국어로만 다시 써 주세요."},
         ]
-        text = llm(messages)
+        text = fix_punct(llm(messages))
         issues = language_issues(text, messages[1]["content"])
     return {
         "answer": text,
