@@ -10,7 +10,9 @@
   python eval_answer.py                # 30문항 전체 (맥, Ollama 필요. i3 기준 수십 분 예상)
   python eval_answer.py Q08 Q14        # 일부만
   python eval_answer.py --fake         # Ollama 없이 흐름 점검
-결과: answer_results.jsonl (전체 답변 원문 포함, 검수용)
+  python eval_answer.py --prompt=v2b   # 프롬프트 버전 선택 (기본 v1)
+결과: answer_results_<버전>.jsonl (전체 답변 원문 포함, 검수용)
+채점은 '근거: … / 답: …' 형식이면 '답:' 뒤만 본다 (인용문 속 숫자로 정답 처리되는 것 방지).
 """
 import json
 import sys
@@ -18,11 +20,11 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from answer import NO_ANSWER, answer, call_ollama, fake_llm
+from answer import DEFAULT_PROMPT, PROMPT_VERSIONS, answer, call_ollama, fake_llm
 from eval_retrieval import load_questions
 from retrieve import BM25, load_chunks
 
-OUT_PATH = Path(__file__).parent / "answer_results.jsonl"
+ROOT = Path(__file__).parent
 REFUSAL = "확인할수없"  # 정규화 후 비교
 
 # 정답 핵심(eval_questions.csv)을 채점 가능한 키워드로 옮긴 것
@@ -77,26 +79,29 @@ def grade(qid, qtype, text):
 
 def main():
     use_fake = "--fake" in sys.argv
+    version = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--prompt=")), DEFAULT_PROMPT)
+    assert version in PROMPT_VERSIONS, f"프롬프트 버전은 {PROMPT_VERSIONS} 중 하나"
+    out_path = ROOT / f"answer_results_{version}.jsonl"
     ids = [a for a in sys.argv[1:] if a.startswith("Q")]
     llm = fake_llm if use_fake else call_ollama
     bm25 = BM25(load_chunks())
     questions = [q for q in load_questions() if not ids or q["id"] in ids]
 
     rows = []
-    with OUT_PATH.open("w", encoding="utf-8") as f:
+    with out_path.open("w", encoding="utf-8") as f:
         for q in questions:
             start = time.time()
-            r = answer(q["질문"], bm25, llm=llm)
+            r = answer(q["질문"], bm25, llm=llm, version=version)
             secs = time.time() - start
             gold = [d.strip() for d in q["근거문서번호"].split(",") if d.strip() != "-"]
             got = [c["doc_no"] for c in r["chunks"]]
             hit = "-" if not gold else ("O" if all(d in got for d in gold) else "△" if any(d in got for d in gold) else "X")
-            verdict, note = grade(q["id"], q["유형"], r["answer"])
+            verdict, note = grade(q["id"], q["유형"], r["final"])
             row = {
                 "id": q["id"], "유형": q["유형"], "질문": q["질문"], "정답 핵심": q["정답 핵심"],
                 "검색": hit, "판정": verdict, "메모": note,
                 "언어": "재작성" if r["retried"] else "", "남은 언어 문제": r["language_issues"],
-                "답변": r["answer"], "검색 청크": [c["chunk_id"] for c in r["chunks"]], "초": round(secs, 1),
+                "답변": r["answer"], "채점 대상": r["final"], "검색 청크": [c["chunk_id"] for c in r["chunks"]], "초": round(secs, 1),
             }
             rows.append(row)
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -107,7 +112,15 @@ def main():
 
     n = len(rows)
     count = Counter(r["판정"] for r in rows)
-    print(f"## 요약 ({n}문항)\n")
+    answerable = [r for r in rows if r["유형"] != "답없음"]
+    unanswerable = [r for r in rows if r["유형"] == "답없음"]
+    refused = sum(1 for r in answerable if "거부함" in r["메모"] or "거부 문구" in r["메모"])
+    print(f"## 요약 (프롬프트 {version}, {n}문항)\n")
+    print("| 지표 | 값 |\n|---|---|")
+    print(f"| 답 있는 질문 정답 | {sum(r['판정'] == '정답' for r in answerable)}/{len(answerable)} |")
+    print(f"| 답 있는 질문 거부 (과잉 거부) | {refused}/{len(answerable)} |")
+    print(f"| 답없음 질문 정답 (올바른 거부) | {sum(r['판정'] == '정답' for r in unanswerable)}/{len(unanswerable)} |")
+    print(f"| 평균 응답 시간 | {sum(r['초'] for r in rows) / max(n, 1):.1f}초 |\n")
     print("| 판정 | 문항 수 |\n|---|---|")
     for v in ("정답", "검수", "오답"):
         print(f"| {v} | {count[v]} |")
@@ -126,7 +139,7 @@ def main():
     print("| id | 유형 | 검색 | 판정 | 메모 | 언어 | 초 |\n|---|---|---|---|---|---|---|")
     for r in rows:
         print(f"| {r['id']} | {r['유형']} | {r['검색']} | {r['판정']} | {r['메모']} | {r['언어']} | {r['초']} |")
-    print(f"\n답변 원문: {OUT_PATH.name}")
+    print(f"\n답변 원문: {out_path.name}")
 
 
 if __name__ == "__main__":
