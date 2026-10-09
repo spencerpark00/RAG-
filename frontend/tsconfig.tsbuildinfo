@@ -1,1 +1,0 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/components/Message.tsx","./src/components/Sidebar.tsx","./src/components/SourcesPanel.tsx","./src/components/ui.tsx","./src/lib/api.ts","./src/lib/store.ts","./vite.config.ts"],"version":"5.7.2"}
