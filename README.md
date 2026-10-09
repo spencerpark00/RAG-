@@ -19,12 +19,26 @@ python chat.py                   # Ollama 서버가 켜져 있어야 함 (curl l
 질문> /종료
 ```
 
-## 웹 화면으로 실행
+## 웹 화면으로 실행 (React)
 
 ```bash
 pip install -r requirements.txt  # 처음 한 번 (fastapi, uvicorn)
+cd frontend && npm install && npm run build && cd ..   # 처음 한 번, 화면 코드를 고친 뒤에도 (Node.js 필요)
 python server.py                 # → 브라우저에서 http://localhost:8000
 ```
+
+- `frontend/dist`(빌드 결과)가 있으면 React 화면, 없으면 단일 HTML 화면(`static/index.html`)을 띄운다. 단일 HTML 화면은 `/classic`에서도 볼 수 있다.
+- 화면을 고치면서 바로 확인하려면: 터미널 1에서 `python server.py`, 터미널 2에서 `cd frontend && npm run dev` → http://localhost:5173 (저장하면 즉시 반영)
+
+| 화면 파일 | 역할 |
+|---|---|
+| `frontend/src/lib/api.ts` | 서버 API 호출, SSE 스트림 해석 (화면은 이 파일 함수만 씀) |
+| `frontend/src/lib/store.ts` | 대화 상태 타입, 브라우저 저장(localStorage) |
+| `frontend/src/App.tsx` | 전체 레이아웃·상태: 사이드바 / 대화 / 근거 패널 |
+| `frontend/src/components/*` | 답변 카드(`Message`), 근거 패널(`SourcesPanel`), 대화 목록(`Sidebar`), 기본 부품(`ui`) |
+| `frontend/src/index.css` | 색·글꼴 디자인 토큰 (라이트/다크) |
+
+기술: Vite + React 18 + TypeScript + Tailwind CSS 4 + lucide 아이콘 (shadcn/ui 스타일 부품을 직접 작성)
 
 - 왼쪽: 대화 (답이 한 글자씩 스트리밍), 근거 칩·복사·👍👎
 - 오른쪽: 근거 문서 패널 (현행/폐지 배지, 답변에 인용된 청크 강조, 원문·표 보기)
@@ -66,7 +80,7 @@ embeddings.json (55 × 1024차원) ──────────┘ ▼
 | 임베딩 | `embed.py` | 청크를 bge-m3로 1024차원 벡터로 바꿔 JSON 파일에 저장 | 벡터 DB(FAISS·pgvector 등), 문서 변경 시 증분 갱신 |
 | 검색 | `retrieve.py` | BM25 + 벡터 검색을 RRF로 합친 하이브리드 (`--retriever=bm25\|vector\|hybrid`) | 재순위(reranker), 메타데이터 필터(현행만 등) |
 | 생성 | `answer.py` | 자료 → 규칙 → 질문 순서의 프롬프트, 근거 없으면 "확인할 수 없습니다" | 더 큰 모델, 출처 링크, 권한별 문서 필터 |
-| 인터페이스 | `chat.py`, `server.py` + `static/index.html` | 터미널 대화 / 웹 API(REST + SSE 스트리밍) + 화면 | 사내 인증(SSO), 권한별 문서 필터, 대화 기록 DB, 상담 시스템 연동 |
+| 인터페이스 | `chat.py`, `server.py` + `frontend/` (React) | 터미널 대화 / 웹 API(REST + SSE 스트리밍) + 화면 | 사내 인증(SSO), 권한별 문서 필터, 대화 기록 DB, 상담 시스템 연동 |
 | 평가 | `eval_retrieval.py`, `eval_answer.py` | 검색 적중(Hit@k)과 답변 정확성을 분리 채점 | 실제 상담 질문 세트, 사람 검수 |
 
 ## 평가 (30문항, 참고용)

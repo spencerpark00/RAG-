@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/* 다크 모드는 <html class="dark">로 전환 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 디자인 토큰: 색은 모두 여기서만 정의하고 컴포넌트는 bg-surface, text-muted 같은 이름만 쓴다 */
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --animate-blink: blink 1s steps(2) infinite;
+  --animate-flash: flash 1.2s ease-out;
+  --animate-rise: rise .25s ease-out;
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes flash { 0% { background-color: var(--brand-soft); } 100% { background-color: var(--surface); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+
+:root {
+  --canvas: #f5f6f8; --surface: #ffffff; --subtle: #f0f2f5; --line: #e4e7ec;
+  --ink: #111318; --muted: #667085; --brand: #3a5ccc; --brand-soft: #e9eefc;
+  --ok: #157347; --ok-soft: #e4f4ea; --bad: #b42318; --bad-soft: #fdecea;
+  --bubble: #3a5ccc;
+}
+.dark {
+  --canvas: #0d0f13; --surface: #15181e; --subtle: #1c2028; --line: #2a2f39;
+  --ink: #e9ebef; --muted: #98a2b3; --brand: #8aa4ff; --brand-soft: #1e2847;
+  --ok: #5fd39a; --ok-soft: #12301f; --bad: #ff8a80; --bad-soft: #3a1714;
+  --bubble: #3550b8;
+}
+
+html, body, #root { height: 100%; }
+body { @apply bg-canvas text-ink font-sans antialiased; font-size: 15px; }
+::selection { background: var(--brand-soft); }

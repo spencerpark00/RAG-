@@ -3,7 +3,8 @@
 브라우저 ↔ 이 서버(/api/*) ↔ RAG(retrieve.py, answer.py) ↔ Ollama
 
 엔드포인트
-  GET  /               채팅 화면 (static/index.html)
+  GET  /               채팅 화면: React 빌드(frontend/dist)가 있으면 그것, 없으면 static/index.html
+  GET  /classic        단일 HTML 버전 화면 (static/index.html)
   GET  /api/health     Ollama 연결, 사용 가능한 검색 방식
   POST /api/chat       {"question", "retriever"} → SSE 스트림
                        event: sources (검색 청크) → token (답 조각, 여러 번) → done (최종 정리)
@@ -28,9 +29,12 @@ from retrieve import EMBEDDINGS_PATH, RETRIEVERS, load_chunks, make_retriever
 
 ROOT = Path(__file__).parent
 FEEDBACK_PATH = ROOT / "feedback.jsonl"
+DIST = ROOT / "frontend" / "dist"  # cd frontend && npm run build 결과물
 
 app = FastAPI(title="한빛텔레콤 업무지식 검색 API")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+if (DIST / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
 
 # 검색기는 서버 시작 때 한 번 만든다 (BM25 색인·벡터 로딩 비용을 질문마다 내지 않도록)
 CHUNKS = load_chunks()
@@ -63,6 +67,12 @@ def chunk_view(c):
 
 @app.get("/")
 def index():
+    react = DIST / "index.html"
+    return FileResponse(react if react.exists() else ROOT / "static" / "index.html")
+
+
+@app.get("/classic")
+def classic():
     return FileResponse(ROOT / "static" / "index.html")
 
 
