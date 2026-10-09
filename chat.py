@@ -53,6 +53,9 @@ def main():
             print("Ollama 서버에 연결할 수 없습니다. 'open -a Ollama' 또는 'ollama serve'로 서버를 켜 주세요.")
             continue
         print(f"\n{last['final']}")
+        if "확인할수없" in last["final"].replace(" ", ""):
+            print(f"\n(검색된 문서에서 근거를 찾지 못함, {time.time() - start:.0f}초)")
+            continue
         print(f"\n참고 문서 ({time.time() - start:.0f}초):")
         for c in cited_chunks(last):
             print(f"  - {c['chunk_id']} [{c['status']}] {c['title']} > {c['section']}")
