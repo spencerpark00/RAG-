@@ -36,10 +36,20 @@ export interface DoneEvent {
   refused: boolean;
   seconds: number;
   llm: LlmInfo;
+  suggestions: Suggestion[]; // 못 찾았을 때 '혹시 이걸 찾으셨나요?'
+}
+
+export interface Suggestion {
+  doc_no: string;
+  title: string;
+  section: string;
+  status: string;
+  question: string;
 }
 
 export interface StreamHandlers {
-  onSources: (d: { retriever: Retriever; chunks: Chunk[]; search_ms: number; notice: string | null }) => void;
+  onRewrite: (terms: string | null) => void;
+  onSources: (d: { retriever: Retriever; chunks: Chunk[]; search_ms: number; notice: string | null; terms: string | null }) => void;
   onToken: (text: string) => void;
   onDone: (d: DoneEvent) => void;
   onError: (message: string) => void;
@@ -58,11 +68,11 @@ export async function getHealth(): Promise<Health> {
 }
 
 /** POST /api/chat 의 SSE 스트림을 읽어 이벤트별 콜백을 부른다. */
-export async function streamChat(question: string, retriever: Retriever, llm: string, h: StreamHandlers, signal: AbortSignal) {
+export async function streamChat(question: string, retriever: Retriever, llm: string, rewrite: boolean, h: StreamHandlers, signal: AbortSignal) {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, retriever, llm }),
+    body: JSON.stringify({ question, retriever, llm, rewrite }),
     signal,
   });
   if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -81,7 +91,8 @@ export async function streamChat(question: string, retriever: Retriever, llm: st
       buf = buf.slice(idx + 2);
       const event = raw.match(/^event: (.*)$/m)?.[1];
       const data = JSON.parse(raw.match(/^data: (.*)$/m)?.[1] ?? "{}");
-      if (event === "sources") h.onSources(data);
+      if (event === "rewrite") h.onRewrite(data.terms);
+      else if (event === "sources") h.onSources(data);
       else if (event === "token") h.onToken(data.text);
       else if (event === "done") h.onDone(data);
       else if (event === "error") h.onError(data.message);

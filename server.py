@@ -6,8 +6,9 @@
   GET  /               채팅 화면: React 빌드(frontend/dist)가 있으면 그것, 없으면 static/index.html
   GET  /classic        단일 HTML 버전 화면 (static/index.html)
   GET  /api/health     Ollama 연결, 사용 가능한 검색 방식
-  POST /api/chat       {"question", "retriever"} → SSE 스트림
-                       event: sources (검색 청크) → token (답 조각, 여러 번) → done (최종 정리)
+  POST /api/chat       {"question", "retriever", "llm", "rewrite"} → SSE 스트림
+                       event: rewrite (보강 검색어) → sources (검색 청크) → token (답 조각, 여러 번) → done (최종 정리)
+                       rewrite 생략 시: API 모델(Groq)이면 켜고, 로컬 모델이면 끈다 (로컬은 느려서)
   POST /api/feedback   {"question", "answer", "rating": "up"|"down"} → feedback.jsonl에 추가
 
   문서 관리 (indexer.py)
@@ -35,6 +36,7 @@ from pydantic import BaseModel
 
 import llm
 from answer import DEFAULT_PROMPT, MODEL, TOP_K, build_messages, final_answer
+from query import fused_search, rewrite_query, suggestions
 import indexer
 from retrieve import EMBEDDINGS_PATH, RETRIEVERS, load_chunks, make_retriever
 
@@ -72,6 +74,7 @@ class ChatRequest(BaseModel):
     question: str
     retriever: str | None = None
     llm: str | None = None
+    rewrite: bool | None = None
 
 
 class DocUpload(BaseModel):
@@ -133,20 +136,27 @@ def chat(req: ChatRequest):
     objs = RETRIEVER_OBJS  # 재색인으로 교체되더라도 이 질문은 같은 검색기로 끝내도록 잡아 둔다
     mode = req.retriever if req.retriever in objs else DEFAULT_RETRIEVER
     engine = req.llm if req.llm in llm.available() else llm.DEFAULT_LLM
+    do_rewrite = req.rewrite if req.rewrite is not None else engine != "ollama"
 
     def events():
         start = time.time()
-        used, notice = mode, None
+        used, notice, terms = mode, None, None
         try:
+            if do_rewrite:
+                # ① 질문 재작성: 일상 표현 → 업무 용어 검색어 (검색만 넓히고, 답변에는 원래 질문을 쓴다)
+                terms = rewrite_query(req.question, llm.make_llm(engine))
+                yield sse("rewrite", {"terms": terms})
+            queries = [req.question, terms]
             try:
-                chunks = objs[mode].search(req.question, k=TOP_K)
+                chunks = fused_search(objs[mode], queries, k=TOP_K)
             except OSError:
                 if mode == "bm25":
                     raise
                 # 의미·하이브리드 검색은 질문 임베딩에 로컬 Ollama(bge-m3)가 필요 → 꺼져 있으면 키워드 검색으로 대체
-                chunks, used = objs["bm25"].search(req.question, k=TOP_K), "bm25"
+                chunks, used = fused_search(objs["bm25"], queries, k=TOP_K), "bm25"
                 notice = "Ollama(bge-m3)에 연결할 수 없어 키워드 검색으로 대체했습니다."
-            yield sse("sources", {"retriever": used, "notice": notice, "chunks": [chunk_view(c) for c in chunks],
+            yield sse("sources", {"retriever": used, "notice": notice, "terms": terms,
+                                  "chunks": [chunk_view(c) for c in chunks],
                                   "search_ms": int((time.time() - start) * 1000)})
             text = ""
             for piece in llm.stream(build_messages(req.question, chunks, DEFAULT_PROMPT), engine):
@@ -163,7 +173,9 @@ def chat(req: ChatRequest):
         # 거부한 답에 모델이 '(근거: 07-0)'을 붙이는 경우가 있어, 거부면 인용 목록을 비운다
         cited = [] if refused else [c["chunk_id"] for c in chunks if c["chunk_id"] in text]
         yield sse("done", {"answer": final, "cited": cited, "refused": refused,
-                           "seconds": round(time.time() - start, 1), "llm": llm.describe(engine)})
+                           "seconds": round(time.time() - start, 1), "llm": llm.describe(engine),
+                           # ② 못 찾았을 때: 검색된 문서 중 관련 있어 보이는 것을 추천 질문으로
+                           "suggestions": suggestions(chunks) if refused else []})
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

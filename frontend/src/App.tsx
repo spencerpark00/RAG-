@@ -1,5 +1,5 @@
 // 화면 전체 상태와 레이아웃: [사이드바 | 대화 | 근거 패널]
-import { ArrowUp, FileText, Menu, Moon, Square, Sun } from "lucide-react";
+import { ArrowUp, FileText, Menu, Moon, Sparkles, Square, Sun } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { DocsPage } from "./components/DocsPage";
 import { Message } from "./components/Message";
@@ -32,6 +32,9 @@ export default function App() {
   const [healthError, setHealthError] = useState(false);
   const [retriever, setRetriever] = useState<Retriever>("hybrid");
   const [llm, setLlm] = useState("ollama");
+  // 질문 보강(재작성): API 모델이면 기본 켜짐, 로컬 모델은 느려서 기본 꺼짐. 모델을 바꾸면 기본값으로 돌아간다.
+  const [rewrite, setRewrite] = useState(false);
+  useEffect(() => setRewrite(llm !== "ollama"), [llm]);
   const [input, setInput] = useState("");
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [showSidebar, setShowSidebar] = useState(false);
@@ -44,7 +47,7 @@ export default function App() {
 
   const conv = conversations.find((c) => c.id === activeId) ?? conversations[0];
   const selectedTurn = conv.turns.find((t) => t.id === selectedTurnId) ?? conv.turns[conv.turns.length - 1];
-  const busy = conv.turns.some((t) => t.stage === "searching" || t.stage === "writing");
+  const busy = conv.turns.some((t) => ["rewriting", "searching", "writing"].includes(t.stage));
 
   const loadHealth = () =>
     getHealth()
@@ -74,7 +77,7 @@ export default function App() {
     const question = raw.trim();
     if (!question || busy) return;
     const convId = conv.id;
-    const turn: Turn = { id: newId(), question, retriever, answer: "", chunks: [], cited: [], refused: false, stage: "searching" };
+    const turn: Turn = { id: newId(), question, retriever, answer: "", chunks: [], cited: [], refused: false, stage: rewrite ? "rewriting" : "searching" };
     setConversations((list) =>
       list
         .map((c) => c.id !== convId ? c : { ...c, title: c.turns.length ? c.title : question.slice(0, 30), updatedAt: Date.now(), turns: [...c.turns, turn] })
@@ -87,10 +90,11 @@ export default function App() {
     abortRef.current = controller;
     let text = "";
     try {
-      await streamChat(question, retriever, llm, {
-        onSources: (d) => patchTurn(convId, turn.id, { chunks: d.chunks, retriever: d.retriever, searchMs: d.search_ms, notice: d.notice ?? undefined, stage: "writing" }),
+      await streamChat(question, retriever, llm, rewrite, {
+        onRewrite: (terms) => patchTurn(convId, turn.id, { terms: terms ?? undefined, stage: "searching" }),
+        onSources: (d) => patchTurn(convId, turn.id, { chunks: d.chunks, retriever: d.retriever, searchMs: d.search_ms, notice: d.notice ?? undefined, terms: d.terms ?? undefined, stage: "writing" }),
         onToken: (t) => { text += t; patchTurn(convId, turn.id, { answer: text }); },
-        onDone: (d) => patchTurn(convId, turn.id, { answer: d.answer, cited: d.cited, refused: d.refused, seconds: d.seconds, llm: d.llm?.model, stage: "done" }),
+        onDone: (d) => patchTurn(convId, turn.id, { answer: d.answer, cited: d.cited, refused: d.refused, seconds: d.seconds, llm: d.llm?.model, suggestions: d.suggestions, stage: "done" }),
         onError: (m) => patchTurn(convId, turn.id, { stage: "error", error: m }),
       }, controller.signal);
     } catch (e) {
@@ -169,6 +173,15 @@ export default function App() {
               ))}
             </select>
           </label>
+          {/* 질문 보강 켜기/끄기 */}
+          <button
+            onClick={() => setRewrite((r) => !r)}
+            title={rewrite ? "질문 보강 켜짐: 일상 표현을 업무 용어로 바꿔 함께 검색" : "질문 보강 꺼짐" + (llm === "ollama" ? " (로컬 모델은 느려서 기본 꺼짐)" : "")}
+            className={cx("inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg border px-2.5 text-xs font-medium",
+              rewrite ? "border-brand bg-brand-soft text-brand" : "border-line bg-subtle text-muted hover:text-ink")}
+          >
+            <Sparkles size={13} /><span className="hidden md:inline">질문 보강</span>
+          </button>
           {/* 검색 방식 세그먼트 컨트롤 */}
           <div className="flex rounded-lg border border-line bg-subtle p-0.5 text-xs">
             {(health?.retrievers ?? ["bm25", "vector", "hybrid"] as Retriever[]).slice().reverse().map((m) => (
@@ -213,6 +226,7 @@ export default function App() {
                     sendFeedback({ question: t.question, answer: t.answer, rating: r, retriever: t.retriever }).catch(() => {});
                   }}
                   onRetry={() => ask(t.question)}
+                  onAsk={(q) => ask(q)}
                 />
               ))
             )}

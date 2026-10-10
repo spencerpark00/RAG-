@@ -78,6 +78,7 @@ export function SourcesPanel({ turn, focusId, onClose }: { turn?: Turn; focusId?
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-subtle/60 px-4 py-2 text-xs text-muted">
           <span className="inline-flex items-center gap-1"><Search size={12} />{RETRIEVER_LABEL[turn.retriever]} 상위 {turn.chunks.length}개</span>
           {turn.searchMs !== undefined && <span>검색 {(turn.searchMs / 1000).toFixed(1)}초</span>}
+          {turn.terms && <span className="basis-full text-brand">질문 보강 검색어: {turn.terms}</span>}
           {turn.seconds !== undefined && <span>전체 {turn.seconds}초</span>}
         </div>
       )}

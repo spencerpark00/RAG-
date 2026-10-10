@@ -1,5 +1,5 @@
 // 대화 상태 타입과 브라우저 저장(localStorage). 서버 DB 없이 이 브라우저에만 남는다.
-import type { Chunk, Retriever } from "./api";
+import type { Chunk, Retriever, Suggestion } from "./api";
 
 export interface Turn {
   id: string;
@@ -13,7 +13,9 @@ export interface Turn {
   seconds?: number;
   searchMs?: number;
   notice?: string; // 검색 대체 등 안내
-  stage: "searching" | "writing" | "done" | "error" | "stopped";
+  terms?: string; // 질문 보강으로 만든 업무 용어 검색어
+  suggestions?: Suggestion[];
+  stage: "rewriting" | "searching" | "writing" | "done" | "error" | "stopped";
   error?: string;
   rating?: "up" | "down";
 }
@@ -43,7 +45,7 @@ export function saveConversations(list: Conversation[]) {
     // 진행 중이던 답변은 저장하지 않는다(새로고침 시 '중단됨'으로 보이도록)
     const clean = list.map((c) => ({
       ...c,
-      turns: c.turns.map((t) => (t.stage === "searching" || t.stage === "writing" ? { ...t, stage: "stopped" as const } : t)),
+      turns: c.turns.map((t) => (["rewriting", "searching", "writing"].includes(t.stage) ? { ...t, stage: "stopped" as const } : t)),
     }));
     localStorage.setItem(KEY, JSON.stringify(clean.slice(0, 30)));
   } catch {

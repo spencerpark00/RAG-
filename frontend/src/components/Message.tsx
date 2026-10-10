@@ -1,5 +1,5 @@
 // 대화 한 턴: 사용자 질문 말풍선 + 어시스턴트 답변 카드
-import { Check, Copy, Info, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, Copy, Info, RotateCcw, Search, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useState } from "react";
 import type { Turn } from "../lib/store";
 import { stripCitation } from "../lib/store";
@@ -12,6 +12,7 @@ interface Props {
   onCite: (chunkId: string) => void;
   onRate: (r: "up" | "down") => void;
   onRetry: () => void;
+  onAsk: (question: string) => void;
 }
 
 function Stage({ text }: { text: string }) {
@@ -23,7 +24,7 @@ function Stage({ text }: { text: string }) {
   );
 }
 
-export function Message({ turn, active, onSelect, onCite, onRate, onRetry }: Props) {
+export function Message({ turn, active, onSelect, onCite, onRate, onRetry, onAsk }: Props) {
   const [copied, setCopied] = useState(false);
   const answer = stripCitation(turn.answer);
 
@@ -43,7 +44,8 @@ export function Message({ turn, active, onSelect, onCite, onRate, onRetry }: Pro
           active ? "border-brand" : "border-line hover:border-muted/40",
         )}
       >
-        {turn.stage === "searching" && <Stage text="문서를 검색하는 중…" />}
+        {turn.stage === "rewriting" && <Stage text="질문을 업무 용어로 바꾸는 중…" />}
+        {turn.stage === "searching" && <Stage text={turn.terms ? `“${turn.terms}”(으)로 함께 검색하는 중…` : "문서를 검색하는 중…"} />}
         {turn.stage === "writing" && !turn.answer && <Stage text={`문서 ${turn.chunks.length}개를 읽고 답변을 작성하는 중…`} />}
         {answer && (
           <p className={cx("whitespace-pre-wrap break-words leading-relaxed", turn.stage === "writing" && "after:ml-0.5 after:inline-block after:h-[1.05em] after:w-[7px] after:animate-blink after:bg-brand after:align-[-2px] after:content-['']")}>
@@ -55,8 +57,24 @@ export function Message({ turn, active, onSelect, onCite, onRate, onRetry }: Pro
         {turn.stage === "stopped" && <p className="mt-1 text-xs text-muted">중단됨</p>}
         {turn.refused && turn.stage === "done" && (
           <p className="mt-2 flex items-start gap-1.5 text-[13px] text-muted">
-            <Info size={14} className="mt-0.5 shrink-0" /> 등록된 문서에서 근거를 찾지 못했습니다. 담당 부서 확인이 필요합니다.
+            <Info size={14} className="mt-0.5 shrink-0" /> 등록된 문서에서 근거를 찾지 못했습니다. 아래에서 찾으시는 내용이 없으면 담당 부서 확인이 필요합니다.
           </p>
+        )}
+        {turn.refused && turn.stage === "done" && !!turn.suggestions?.length && (
+          <div className="mt-3 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+            <div className="text-xs font-semibold text-ink">혹시 이걸 찾으셨나요?</div>
+            {turn.suggestions.map((s) => (
+              <button
+                key={s.doc_no}
+                onClick={() => onAsk(s.question)}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-left text-[13px] transition hover:border-brand"
+              >
+                <Search size={13} className="shrink-0 text-brand" />
+                <span className="min-w-0 flex-1 truncate"><b className="font-semibold">{s.title}</b>{s.section !== "개요" && <span className="text-muted"> · {s.section}</span>}</span>
+                {s.status === "폐지" && <span className="shrink-0 text-xs text-bad">폐지</span>}
+              </button>
+            ))}
+          </div>
         )}
 
         {(turn.stage === "done" || turn.stage === "error" || turn.stage === "stopped") && (
