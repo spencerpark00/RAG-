@@ -4,12 +4,19 @@
 
 ## 빠른 실행
 
+> 아래 명령은 한 줄씩 복사해 실행한다. (맥 zsh는 기본 설정에서 줄 끝 `#` 설명을 주석으로 처리하지 않으므로 명령에 설명을 붙이지 않았다.)
+
 ```bash
-source .venv/bin/activate        # 맥: ~/Documents/agent-practice/.venv
-ollama pull bge-m3               # 처음 한 번 (임베딩 모델, 약 1.2GB)
-python embed.py                  # 처음 한 번 (청크 55개 → embeddings.json)
-python chat.py                   # Ollama 서버가 켜져 있어야 함 (curl localhost:11434 → "Ollama is running")
+source .venv/bin/activate
+ollama pull bge-m3
+python embed.py
+python chat.py
 ```
+
+- `source .venv/bin/activate`: 맥: ~/Documents/agent-practice/.venv
+- `ollama pull bge-m3`: 처음 한 번 (임베딩 모델, 약 1.2GB)
+- `python embed.py`: 처음 한 번 (청크 55개 → embeddings.json)
+- `python chat.py`: Ollama 서버가 켜져 있어야 함 (curl localhost:11434 → "Ollama is running")
 
 ```
 질문> 5G 스탠다드 월정액은?
@@ -22,10 +29,14 @@ python chat.py                   # Ollama 서버가 켜져 있어야 함 (curl l
 ## 웹 화면으로 실행 (React)
 
 ```bash
-pip install -r requirements.txt  # 처음 한 번 (fastapi, uvicorn)
-cd frontend && npm install && npm run build && cd ..   # 처음 한 번, 화면 코드를 고친 뒤에도 (Node.js 필요)
-python server.py                 # → 브라우저에서 http://localhost:8000
+pip install -r requirements.txt
+cd frontend && npm install && npm run build && cd ..
+python server.py
 ```
+
+- `pip install -r requirements.txt`: 처음 한 번 (fastapi, uvicorn)
+- `cd frontend && npm install && npm run build && cd ..`: 처음 한 번, 화면 코드를 고친 뒤에도 (Node.js 필요)
+- `python server.py`: → 브라우저에서 http://localhost:8000
 
 - `frontend/dist`(빌드 결과)가 있으면 React 화면, 없으면 단일 HTML 화면(`static/index.html`)을 띄운다. 단일 HTML 화면은 `/classic`에서도 볼 수 있다.
 - 화면을 고치면서 바로 확인하려면: 터미널 1에서 `python server.py`, 터미널 2에서 `cd frontend && npm run dev` → http://localhost:5173 (저장하면 즉시 반영)
@@ -86,10 +97,14 @@ embeddings.json (55 × 1024차원) ──────────┘ ▼
 ## 평가 (30문항, 참고용)
 
 ```bash
-python eval_retrieval.py --retriever=bm25     # Hit@1 22/27, Hit@5(근거 전부) 26/27
-python eval_retrieval.py --retriever=hybrid   # Hit@1 25/27, Hit@5(근거 전부) 27/27
-python eval_answer.py                         # 답변까지: 25~26/30 (실행마다 1~2문항 흔들림)
+python eval_retrieval.py --retriever=bm25
+python eval_retrieval.py --retriever=hybrid
+python eval_answer.py
 ```
+
+- `python eval_retrieval.py --retriever=bm25`: Hit@1 22/27, Hit@5(근거 전부) 26/27
+- `python eval_retrieval.py --retriever=hybrid`: Hit@1 25/27, Hit@5(근거 전부) 27/27
+- `python eval_answer.py`: 답변까지: 25~26/30 (실행마다 1~2문항 흔들림)
 
 프롬프트 실험 기록: `experiments/prompt_v2.md`
 
