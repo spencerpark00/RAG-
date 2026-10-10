@@ -11,6 +11,7 @@
 import json
 import os
 import re
+import ssl
 import sys
 import time
 import urllib.error
@@ -48,6 +49,21 @@ PROVIDERS = {
 DEFAULT_LLM = "ollama"
 
 
+def _ssl_context():
+    """HTTPS 인증서 확인용. python.org 설치판 macOS Python은 기본 인증서 목록이 비어 있어
+    CERTIFICATE_VERIFY_FAILED가 나므로, certifi(Mozilla 인증서 묶음)가 있으면 함께 쓴다."""
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+        ctx.load_verify_locations(certifi.where())
+    except ImportError:
+        pass
+    return ctx
+
+
+SSL_CONTEXT = _ssl_context()
+
+
 class LLMError(OSError):
     """모델 호출 실패 (OSError 하위라서 기존 '연결 실패' 처리에 그대로 걸린다)."""
 
@@ -74,7 +90,7 @@ def _open(p, messages, stream, retries=3):
     )
     for attempt in range(retries + 1):
         try:
-            return urllib.request.urlopen(req, timeout=120)
+            return urllib.request.urlopen(req, timeout=120, context=SSL_CONTEXT)
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:300]
             if e.code == 429 and attempt < retries:
@@ -89,7 +105,8 @@ def _open(p, messages, stream, retries=3):
                 raise LLMError(f"{p['label']} 무료 사용량 한도를 넘었습니다 (429). 잠시 후 다시 시도하세요.") from e
             raise LLMError(f"{p['label']} 호출 실패 (HTTP {e.code}): {detail}") from e
         except urllib.error.URLError as e:
-            raise LLMError(f"{p['label']} 서버에 연결할 수 없습니다: {e.reason}") from e
+            hint = " → 'pip install -r requirements.txt'로 certifi를 설치한 뒤 서버를 다시 켜세요." if "CERTIFICATE_VERIFY_FAILED" in str(e.reason) else ""
+            raise LLMError(f"{p['label']} 서버에 연결할 수 없습니다: {e.reason}{hint}") from e
 
 
 THINK = re.compile(r"<think>.*?</think>\s*", re.S)  # 추론 과정을 본문에 섞어 내는 모델(qwen3 등) 대비
