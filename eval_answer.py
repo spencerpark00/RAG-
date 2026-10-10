@@ -11,6 +11,7 @@
   python eval_answer.py Q08 Q14        # 일부만
   python eval_answer.py --fake         # Ollama 없이 흐름 점검
   python eval_answer.py --prompt=v2b   # 프롬프트 버전 선택 (기본 v2a)
+  python eval_answer.py --llm=groq     # 생성 모델을 Groq로 (.env에 GROQ_API_KEY 필요)
   python eval_answer.py --retriever=bm25  # 검색 방식 선택 (기본: embeddings.json 있으면 hybrid)
 결과: answer_results_<버전>.jsonl (전체 답변 원문 포함, 검수용)
 채점은 '근거: … / 답: …' 형식이면 '답:' 뒤만 본다 (인용문 속 숫자로 정답 처리되는 것 방지).
@@ -21,7 +22,8 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from answer import DEFAULT_PROMPT, PROMPT_VERSIONS, answer, call_ollama, fake_llm
+import llm as llm_mod
+from answer import DEFAULT_PROMPT, PROMPT_VERSIONS, answer, fake_llm
 from eval_retrieval import load_questions
 from retrieve import make_retriever, retriever_arg
 
@@ -82,9 +84,11 @@ def main():
     use_fake = "--fake" in sys.argv
     version = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--prompt=")), DEFAULT_PROMPT)
     assert version in PROMPT_VERSIONS, f"프롬프트 버전은 {PROMPT_VERSIONS} 중 하나"
-    out_path = ROOT / f"answer_results_{version}.jsonl"
+    engine_tag = "" if llm_mod.llm_arg(sys.argv[1:]) == llm_mod.DEFAULT_LLM else "_" + llm_mod.llm_arg(sys.argv[1:])
+    out_path = ROOT / f"answer_results_{version}{engine_tag}.jsonl"
     ids = [a for a in sys.argv[1:] if a.startswith("Q")]
-    llm = fake_llm if use_fake else call_ollama
+    engine = llm_mod.llm_arg(sys.argv[1:])
+    llm = fake_llm if use_fake else llm_mod.make_llm(engine)
     retriever = make_retriever(retriever_arg(sys.argv[1:]))
     mode = type(retriever).__name__
     questions = [q for q in load_questions() if not ids or q["id"] in ids]
@@ -117,7 +121,7 @@ def main():
     answerable = [r for r in rows if r["유형"] != "답없음"]
     unanswerable = [r for r in rows if r["유형"] == "답없음"]
     refused = sum(1 for r in answerable if "거부함" in r["메모"] or "거부 문구" in r["메모"])
-    print(f"## 요약 (프롬프트 {version}, 검색 {mode}, {n}문항)\n")
+    print(f"## 요약 (프롬프트 {version}, 검색 {mode}, 생성 {llm_mod.describe(engine)['model']}, {n}문항)\n")
     print("| 지표 | 값 |\n|---|---|")
     print(f"| 답 있는 질문 정답 | {sum(r['판정'] == '정답' for r in answerable)}/{len(answerable)} |")
     print(f"| 답 있는 질문 거부 (과잉 거부) | {refused}/{len(answerable)} |")

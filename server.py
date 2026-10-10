@@ -33,7 +33,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from answer import DEFAULT_PROMPT, MODEL, TOP_K, build_messages, final_answer, stream_ollama
+import llm
+from answer import DEFAULT_PROMPT, MODEL, TOP_K, build_messages, final_answer
 import indexer
 from retrieve import EMBEDDINGS_PATH, RETRIEVERS, load_chunks, make_retriever
 
@@ -70,6 +71,7 @@ load_retrievers()
 class ChatRequest(BaseModel):
     question: str
     retriever: str | None = None
+    llm: str | None = None
 
 
 class DocUpload(BaseModel):
@@ -123,24 +125,36 @@ def health():
     except OSError as e:
         ollama = {"ok": False, "error": str(e)}
     return {"ollama": ollama, "llm": MODEL, "retrievers": AVAILABLE, "default_retriever": DEFAULT_RETRIEVER,
-            "chunks": len(CHUNKS)}
+            "chunks": len(CHUNKS), "llms": [llm.describe(p) for p in llm.available()], "default_llm": llm.DEFAULT_LLM}
 
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
     objs = RETRIEVER_OBJS  # 재색인으로 교체되더라도 이 질문은 같은 검색기로 끝내도록 잡아 둔다
     mode = req.retriever if req.retriever in objs else DEFAULT_RETRIEVER
+    engine = req.llm if req.llm in llm.available() else llm.DEFAULT_LLM
 
     def events():
         start = time.time()
+        used, notice = mode, None
         try:
-            chunks = objs[mode].search(req.question, k=TOP_K)
-            yield sse("sources", {"retriever": mode, "chunks": [chunk_view(c) for c in chunks],
+            try:
+                chunks = objs[mode].search(req.question, k=TOP_K)
+            except OSError:
+                if mode == "bm25":
+                    raise
+                # 의미·하이브리드 검색은 질문 임베딩에 로컬 Ollama(bge-m3)가 필요 → 꺼져 있으면 키워드 검색으로 대체
+                chunks, used = objs["bm25"].search(req.question, k=TOP_K), "bm25"
+                notice = "Ollama(bge-m3)에 연결할 수 없어 키워드 검색으로 대체했습니다."
+            yield sse("sources", {"retriever": used, "notice": notice, "chunks": [chunk_view(c) for c in chunks],
                                   "search_ms": int((time.time() - start) * 1000)})
             text = ""
-            for piece in stream_ollama(build_messages(req.question, chunks, DEFAULT_PROMPT)):
+            for piece in llm.stream(build_messages(req.question, chunks, DEFAULT_PROMPT), engine):
                 text += piece
                 yield sse("token", {"text": piece})
+        except llm.LLMError as e:  # API 키 오류·사용량 한도 등 (메시지에 원인이 들어 있음)
+            yield sse("error", {"message": str(e)})
+            return
         except OSError as e:  # Ollama 꺼짐 등 (URLError는 OSError의 하위 클래스)
             yield sse("error", {"message": f"Ollama 서버에 연결할 수 없습니다: {e}"})
             return
@@ -149,7 +163,7 @@ def chat(req: ChatRequest):
         # 거부한 답에 모델이 '(근거: 07-0)'을 붙이는 경우가 있어, 거부면 인용 목록을 비운다
         cited = [] if refused else [c["chunk_id"] for c in chunks if c["chunk_id"] in text]
         yield sse("done", {"answer": final, "cited": cited, "refused": refused,
-                           "seconds": round(time.time() - start, 1)})
+                           "seconds": round(time.time() - start, 1), "llm": llm.describe(engine)})
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

@@ -3,6 +3,7 @@
 실행
   python chat.py          # Ollama 필요
   python chat.py --fake   # Ollama 없이 흐름만 점검 (--retriever=bm25와 함께)
+  python chat.py --llm=groq   # 생성 모델을 Groq로 (.env에 GROQ_API_KEY 필요)
   python chat.py --retriever=bm25   # 검색 방식 선택 (기본: embeddings.json 있으면 hybrid)
 
 명령: /근거 (직전 답변의 근거 원문), /종료
@@ -12,7 +13,8 @@ import sys
 import time
 import urllib.error
 
-from answer import answer, call_ollama, fake_llm
+import llm as llm_mod
+from answer import answer, fake_llm
 from retrieve import make_retriever, retriever_arg
 
 
@@ -24,10 +26,11 @@ def cited_chunks(result):
 
 
 def main():
-    llm = fake_llm if "--fake" in sys.argv else call_ollama
+    engine = llm_mod.llm_arg(sys.argv[1:])
+    llm = fake_llm if "--fake" in sys.argv else llm_mod.make_llm(engine)
     retriever = make_retriever(retriever_arg(sys.argv[1:]))
     last = None
-    print(f"한빛텔레콤 업무지식 검색 챗봇입니다 (검색: {type(retriever).__name__}). 질문을 입력하세요. (/근거, /종료)")
+    print(f"한빛텔레콤 업무지식 검색 챗봇입니다 (검색: {type(retriever).__name__}, 생성: {llm_mod.describe(engine)['model']}). 질문을 입력하세요. (/근거, /종료)")
 
     while True:
         try:
@@ -50,6 +53,9 @@ def main():
         start = time.time()
         try:
             last = answer(question, retriever, llm=llm)
+        except llm_mod.LLMError as e:
+            print(e)
+            continue
         except urllib.error.URLError:
             print("Ollama 서버에 연결할 수 없습니다. 'open -a Ollama' 또는 'ollama serve'로 서버를 켜 주세요.")
             continue

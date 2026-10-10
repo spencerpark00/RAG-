@@ -66,6 +66,29 @@ server.py (FastAPI) ── SSE 스트림: sources → token… → done
    └ answer.py    프롬프트 조립 → Ollama 스트리밍 호출
 ```
 
+## 생성 모델 바꾸기: 로컬 Ollama ↔ Groq (무료 API)
+
+검색과 프롬프트는 그대로 두고, 답을 쓰는 모델만 바꾼다 (`llm.py`).
+
+1. https://console.groq.com 가입 → API Keys → 키 생성
+2. 프로젝트 폴더에 `.env` 파일을 만들고 키를 넣는다 (`.env.example` 참고, `.env`는 git에 올라가지 않음)
+3. 서버를 다시 켜면 화면 상단 모델 선택에 `Groq · gpt-oss-120b`가 나타난다
+
+```bash
+cp .env.example .env
+open -e .env
+python server.py
+python chat.py --llm=groq
+python eval_answer.py --llm=groq
+```
+
+- `cp .env.example .env`: 설정 파일 만들기
+- `open -e .env`: 텍스트 편집기로 열어 `GROQ_API_KEY=` 뒤에 키를 붙여 넣고 저장
+- `python chat.py --llm=groq`, `python eval_answer.py --llm=groq`: 터미널 챗봇·평가도 Groq로
+- 무료 한도(분당·일일 요청/토큰)를 넘으면 서버가 알려준 시간만큼 기다렸다 재시도한다.
+- 의미·하이브리드 검색은 질문 임베딩에 로컬 Ollama(bge-m3)가 필요하다. Ollama가 꺼져 있으면 자동으로 키워드 검색으로 대체한다 → Groq + 키워드 검색 조합은 Ollama 없이도 동작.
+- 주의: Groq를 쓰면 질문과 검색된 문서 원문이 외부 서버로 전송된다. 더미 데이터 전용.
+
 ## 문서 관리 (웹 화면 왼쪽 메뉴 → 문서 관리)
 
 | 기능 | 동작 | 저장 위치 |
@@ -108,7 +131,7 @@ embeddings.json (55 × 1024차원) ──────────┘ ▼
 | 로딩·청킹 | `chunk.py` | md를 섹션 단위로 자르고(800자 초과 시 분할) 메타데이터(현행/폐지, 시행일)를 청크마다 붙임 | PDF·HWP·엑셀 파서, 표·이미지 처리, 길이 상한 |
 | 임베딩·색인 | `embed.py`, `indexer.py` | 청크를 bge-m3로 1024차원 벡터로 바꿔 JSON 파일에 저장, 바뀐 청크만 다시 임베딩 | 벡터 DB(FAISS·pgvector 등), 문서 변경 시 증분 갱신 |
 | 검색 | `retrieve.py` | BM25 + 벡터 검색을 RRF로 합친 하이브리드 (`--retriever=bm25\|vector\|hybrid`) | 재순위(reranker), 메타데이터 필터(현행만 등) |
-| 생성 | `answer.py` | 자료 → 규칙 → 질문 순서의 프롬프트, 근거 없으면 "확인할 수 없습니다" | 더 큰 모델, 출처 링크, 권한별 문서 필터 |
+| 생성 | `answer.py`, `llm.py` | 자료 → 규칙 → 질문 순서의 프롬프트, 근거 없으면 "확인할 수 없습니다". 모델은 로컬 Ollama 또는 Groq(OpenAI 호환) | 더 큰 모델, 출처 링크, 권한별 문서 필터 |
 | 인터페이스 | `chat.py`, `server.py` + `frontend/` (React) | 터미널 대화 / 웹 API(REST + SSE 스트리밍) + 화면 | 사내 인증(SSO), 권한별 문서 필터, 대화 기록 DB, 상담 시스템 연동 |
 | 평가 | `eval_retrieval.py`, `eval_answer.py` | 검색 적중(Hit@k)과 답변 정확성을 분리 채점 | 실제 상담 질문 세트, 사람 검수 |
 

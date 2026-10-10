@@ -50,6 +50,7 @@ export function Message({ turn, active, onSelect, onCite, onRate, onRetry }: Pro
             {answer}
           </p>
         )}
+        {turn.notice && <p className="mt-2 flex items-start gap-1.5 text-xs text-muted"><Info size={13} className="mt-0.5 shrink-0" />{turn.notice}</p>}
         {turn.stage === "error" && <p className="text-sm text-bad">{turn.error}</p>}
         {turn.stage === "stopped" && <p className="mt-1 text-xs text-muted">중단됨</p>}
         {turn.refused && turn.stage === "done" && (
@@ -71,6 +72,7 @@ export function Message({ turn, active, onSelect, onCite, onRate, onRetry }: Pro
               </button>
             ))}
             {turn.seconds !== undefined && <span className="ml-1">{turn.seconds}초</span>}
+            {turn.llm && <span className="hidden sm:inline">· {turn.llm.replace(/^.*\//, "")}</span>}
             <span className="flex-1" />
             {turn.stage === "done" && (
               <>

@@ -74,7 +74,7 @@ export function Sidebar({ conversations, activeId, view, onView, health, onNew, 
         <div className="font-medium text-ink">RAG 파이프라인</div>
         <div>색인된 청크 {health?.chunks ?? "-"}개</div>
         <div>검색: BM25 + bge-m3 벡터 (RRF)</div>
-        <div>생성: {health?.llm ?? "-"} (로컬 Ollama)</div>
+        <div>생성: {(health?.llms ?? []).map((m) => m.model.replace(/^.*\//, "")).join(" / ") || "-"}</div>
       </div>
     </div>
   );

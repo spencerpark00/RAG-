@@ -20,6 +20,14 @@ export interface Health {
   retrievers: Retriever[];
   default_retriever: Retriever;
   chunks: number;
+  llms: LlmInfo[]; // 사용 가능한 생성 모델 (키가 없으면 로컬만)
+  default_llm: string;
+}
+
+export interface LlmInfo {
+  id: string; // "ollama" | "groq"
+  label: string;
+  model: string;
 }
 
 export interface DoneEvent {
@@ -27,10 +35,11 @@ export interface DoneEvent {
   cited: string[];
   refused: boolean;
   seconds: number;
+  llm: LlmInfo;
 }
 
 export interface StreamHandlers {
-  onSources: (d: { retriever: Retriever; chunks: Chunk[]; search_ms: number }) => void;
+  onSources: (d: { retriever: Retriever; chunks: Chunk[]; search_ms: number; notice: string | null }) => void;
   onToken: (text: string) => void;
   onDone: (d: DoneEvent) => void;
   onError: (message: string) => void;
@@ -49,11 +58,11 @@ export async function getHealth(): Promise<Health> {
 }
 
 /** POST /api/chat 의 SSE 스트림을 읽어 이벤트별 콜백을 부른다. */
-export async function streamChat(question: string, retriever: Retriever, h: StreamHandlers, signal: AbortSignal) {
+export async function streamChat(question: string, retriever: Retriever, llm: string, h: StreamHandlers, signal: AbortSignal) {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, retriever }),
+    body: JSON.stringify({ question, retriever, llm }),
     signal,
   });
   if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);

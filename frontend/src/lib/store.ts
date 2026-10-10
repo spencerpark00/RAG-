@@ -5,12 +5,14 @@ export interface Turn {
   id: string;
   question: string;
   retriever: Retriever;
+  llm?: string; // 답을 쓴 모델 이름 (예: openai/gpt-oss-120b)
   answer: string;
   chunks: Chunk[];
   cited: string[];
   refused: boolean;
   seconds?: number;
   searchMs?: number;
+  notice?: string; // 검색 대체 등 안내
   stage: "searching" | "writing" | "done" | "error" | "stopped";
   error?: string;
   rating?: "up" | "down";

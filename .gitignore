@@ -10,3 +10,4 @@ uploads/
 doc_overrides.json
 index_state.json
 chunks.jsonl
+.env

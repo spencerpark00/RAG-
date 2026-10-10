@@ -31,6 +31,7 @@ export default function App() {
   const [health, setHealth] = useState<Health>();
   const [healthError, setHealthError] = useState(false);
   const [retriever, setRetriever] = useState<Retriever>("hybrid");
+  const [llm, setLlm] = useState("ollama");
   const [input, setInput] = useState("");
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [showSidebar, setShowSidebar] = useState(false);
@@ -47,7 +48,7 @@ export default function App() {
 
   const loadHealth = () =>
     getHealth()
-      .then((h) => { setHealth(h); setHealthError(false); setRetriever((r) => (h.retrievers.includes(r) ? r : h.default_retriever)); })
+      .then((h) => { setHealth(h); setHealthError(false); setRetriever((r) => (h.retrievers.includes(r) ? r : h.default_retriever)); setLlm((l) => (h.llms.some((x) => x.id === l) ? l : h.default_llm)); })
       .catch(() => setHealthError(true));
   useEffect(() => { loadHealth(); }, []);
   useEffect(() => {
@@ -86,10 +87,10 @@ export default function App() {
     abortRef.current = controller;
     let text = "";
     try {
-      await streamChat(question, retriever, {
-        onSources: (d) => patchTurn(convId, turn.id, { chunks: d.chunks, retriever: d.retriever, searchMs: d.search_ms, stage: "writing" }),
+      await streamChat(question, retriever, llm, {
+        onSources: (d) => patchTurn(convId, turn.id, { chunks: d.chunks, retriever: d.retriever, searchMs: d.search_ms, notice: d.notice ?? undefined, stage: "writing" }),
         onToken: (t) => { text += t; patchTurn(convId, turn.id, { answer: text }); },
-        onDone: (d) => patchTurn(convId, turn.id, { answer: d.answer, cited: d.cited, refused: d.refused, seconds: d.seconds, stage: "done" }),
+        onDone: (d) => patchTurn(convId, turn.id, { answer: d.answer, cited: d.cited, refused: d.refused, seconds: d.seconds, llm: d.llm?.model, stage: "done" }),
         onError: (m) => patchTurn(convId, turn.id, { stage: "error", error: m }),
       }, controller.signal);
     } catch (e) {
@@ -119,11 +120,8 @@ export default function App() {
     });
   }
 
-  const status = healthError
-    ? { ok: false, text: "서버 연결 안 됨" }
-    : !health ? { ok: undefined, text: "연결 확인 중" }
-    : health.ollama.ok ? { ok: true, text: `${health.llm} 연결됨` }
-    : { ok: false, text: "Ollama 연결 안 됨" };
+  // 상태 점: 서버 연결 + (로컬 모델을 고른 경우) Ollama 연결
+  const status = healthError ? false : !health ? undefined : llm !== "ollama" || health.ollama.ok;
 
   return (
     <div className="flex h-full">
@@ -162,10 +160,15 @@ export default function App() {
         <header className="flex h-15 shrink-0 items-center gap-2 border-b border-line bg-surface px-4">
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setShowSidebar(true)} aria-label="메뉴"><Menu size={18} /></Button>
           <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold"><span className="hidden sm:inline">{conv.title}</span></h1>
-          <span className="hidden items-center gap-1.5 rounded-full bg-subtle px-2.5 py-1 text-xs text-muted sm:inline-flex">
-            <span className={cx("size-1.5 rounded-full", status.ok === true && "bg-ok", status.ok === false && "bg-bad", status.ok === undefined && "bg-muted")} />
-            {status.text}
-          </span>
+          {/* 생성 모델 선택: .env에 GROQ_API_KEY가 있으면 Groq가 목록에 나타난다 */}
+          <label className="hidden h-8 items-center gap-1.5 rounded-lg border border-line bg-subtle pl-2.5 text-xs text-muted sm:inline-flex" title={healthError ? "서버 연결 안 됨" : health && !health.ollama.ok && llm === "ollama" ? "Ollama 연결 안 됨" : "생성 모델"}>
+            <span className={cx("size-1.5 shrink-0 rounded-full", status === true && "bg-ok", status === false && "bg-bad", status === undefined && "bg-muted")} />
+            <select value={llm} onChange={(e) => setLlm(e.target.value)} className="h-full cursor-pointer bg-transparent pr-2 font-medium text-ink outline-none">
+              {(health?.llms ?? [{ id: "ollama", label: "로컬", model: "qwen2.5:3b" }]).map((m) => (
+                <option key={m.id} value={m.id}>{m.label} · {m.model.replace(/^.*\//, "")}</option>
+              ))}
+            </select>
+          </label>
           {/* 검색 방식 세그먼트 컨트롤 */}
           <div className="flex rounded-lg border border-line bg-subtle p-0.5 text-xs">
             {(health?.retrievers ?? ["bm25", "vector", "hybrid"] as Retriever[]).slice().reverse().map((m) => (
