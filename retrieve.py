@@ -59,6 +59,9 @@ class BM25:
 
 
 def load_chunks(path=CHUNKS_PATH):
+    if not path.exists():  # 처음 실행이면 문서에서 바로 만든다 (chunks.jsonl은 생성 파일이라 git에 없음)
+        from chunk import chunk_all, write_chunks
+        write_chunks(chunk_all(), path)
     with path.open(encoding="utf-8") as f:
         return [json.loads(line) for line in f]
 

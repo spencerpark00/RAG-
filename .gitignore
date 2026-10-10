@@ -6,3 +6,7 @@ answer_results*.jsonl
 eval_report*.md
 embeddings.json
 feedback.jsonl
+uploads/
+doc_overrides.json
+index_state.json
+chunks.jsonl

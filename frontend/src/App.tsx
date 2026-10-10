@@ -1,6 +1,7 @@
 // 화면 전체 상태와 레이아웃: [사이드바 | 대화 | 근거 패널]
 import { ArrowUp, FileText, Menu, Moon, Square, Sun } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { DocsPage } from "./components/DocsPage";
 import { Message } from "./components/Message";
 import { Sidebar } from "./components/Sidebar";
 import { SourcesPanel } from "./components/SourcesPanel";
@@ -34,6 +35,8 @@ export default function App() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [showSidebar, setShowSidebar] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  // 화면 전환: 주소 끝 #/docs 이면 문서 관리 (새로고침해도 유지)
+  const [view, setView] = useState<"chat" | "docs">(() => (location.hash === "#/docs" ? "docs" : "chat"));
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -42,11 +45,15 @@ export default function App() {
   const selectedTurn = conv.turns.find((t) => t.id === selectedTurnId) ?? conv.turns[conv.turns.length - 1];
   const busy = conv.turns.some((t) => t.stage === "searching" || t.stage === "writing");
 
-  useEffect(() => {
+  const loadHealth = () =>
     getHealth()
-      .then((h) => { setHealth(h); setRetriever(h.default_retriever); })
+      .then((h) => { setHealth(h); setHealthError(false); setRetriever((r) => (h.retrievers.includes(r) ? r : h.default_retriever)); })
       .catch(() => setHealthError(true));
-  }, []);
+  useEffect(() => { loadHealth(); }, []);
+  useEffect(() => {
+    history.replaceState(null, "", view === "docs" ? "#/docs" : "#/");
+    setShowSidebar(false);
+  }, [view]);
   useEffect(() => saveConversations(conversations), [conversations]);
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -99,6 +106,7 @@ export default function App() {
     setConversations((list) => [fresh, ...list.filter((c) => c.turns.length > 0)]);
     setActiveId(fresh.id);
     setSelectedTurnId(undefined);
+    setView("chat");
     setShowSidebar(false);
   }
 
@@ -127,9 +135,11 @@ export default function App() {
         <Sidebar
           conversations={conversations}
           activeId={conv.id}
+          view={view}
+          onView={setView}
           health={health}
           onNew={newChat}
-          onSelect={(id) => { setActiveId(id); setSelectedTurnId(undefined); setShowSidebar(false); }}
+          onSelect={(id) => { setActiveId(id); setSelectedTurnId(undefined); setShowSidebar(false); setView("chat"); }}
           onDelete={deleteChat}
           onClose={() => setShowSidebar(false)}
         />
@@ -138,6 +148,16 @@ export default function App() {
         <div className="fixed inset-0 z-20 bg-black/30 lg:hidden" onClick={() => { setShowSidebar(false); setShowSources(false); }} />
       )}
 
+      {view === "docs" ? (
+        <main className="flex min-w-0 flex-1 flex-col">
+          <header className="flex h-15 shrink-0 items-center gap-2 border-b border-line bg-surface px-4">
+            <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setShowSidebar(true)} aria-label="메뉴"><Menu size={18} /></Button>
+            <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold">문서 관리</h1>
+            <Button variant="ghost" size="icon" onClick={() => setDark((d) => !d)} aria-label="테마 전환">{dark ? <Sun size={16} /> : <Moon size={16} />}</Button>
+          </header>
+          <div className="min-h-0 flex-1"><DocsPage onIndexed={loadHealth} /></div>
+        </main>
+      ) : (<>
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-15 shrink-0 items-center gap-2 border-b border-line bg-surface px-4">
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setShowSidebar(true)} aria-label="메뉴"><Menu size={18} /></Button>
@@ -232,6 +252,7 @@ export default function App() {
       )}>
         <SourcesPanel turn={selectedTurn} focusId={focusChunk} onClose={() => setShowSources(false)} />
       </aside>
+      </>)}
     </div>
   );
 }

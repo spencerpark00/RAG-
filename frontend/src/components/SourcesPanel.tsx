@@ -6,7 +6,7 @@ import type { Turn } from "../lib/store";
 import { Badge, Button, StatusBadge, cx } from "./ui";
 
 /** 청크 본문: 첫 줄(머리말)은 카드 제목과 겹쳐 빼고, 마크다운 표는 <table>로 */
-function ChunkBody({ text }: { text: string }) {
+export function ChunkBody({ text }: { text: string }) {
   const blocks: ({ kind: "text"; lines: string[] } | { kind: "table"; rows: string[][] })[] = [];
   for (const line of text.split("\n").slice(1)) {
     const t = line.trim();

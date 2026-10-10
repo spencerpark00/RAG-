@@ -87,3 +87,69 @@ export function sendFeedback(body: { question: string; answer: string; rating: "
     body: JSON.stringify(body),
   });
 }
+
+// ---------------- 문서 관리 ----------------
+
+export type DocStatus = "현행" | "폐지" | "미표기";
+
+export interface DocItem {
+  doc_no: string;
+  file: string;
+  title: string;
+  doc_id: string;
+  status: DocStatus;
+  effective: string;
+  source: "sample" | "upload";
+  excluded: boolean;
+  overridden: boolean;
+  chunks: number;
+  chars: number;
+}
+
+export interface IndexStats {
+  docs: number;
+  chunks: number;
+  embedded: number;
+  reused: number;
+  removed: number;
+  embedding_error: string | null;
+  seconds: number;
+}
+
+export interface IndexStatus {
+  indexed_at: string | null;
+  needs_reindex: boolean;
+  last: IndexStats | null;
+  embeddings: boolean;
+}
+
+export interface DocDetail {
+  doc_no: string;
+  title: string;
+  status: DocStatus;
+  effective: string;
+  source: "sample" | "upload";
+  excluded: boolean;
+  raw: string;
+  chunks: Chunk[];
+}
+
+async function json<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+const send = (method: string, url: string, body?: unknown) =>
+  fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+
+export const getDocs = () => fetch("/api/docs").then((r) => json<{ docs: DocItem[]; index: IndexStatus; retrievers: Retriever[] }>(r));
+export const getDoc = (no: string) => fetch(`/api/docs/${no}`).then((r) => json<DocDetail>(r));
+export const uploadDoc = (body: { title: string; content: string; doc_id: string; status: DocStatus; effective: string }) =>
+  send("POST", "/api/docs", body).then((r) => json<{ doc_no: string }>(r));
+export const patchDoc = (no: string, body: { status?: DocStatus; effective?: string; excluded?: boolean }) =>
+  send("PATCH", `/api/docs/${no}`, body).then((r) => json<{ ok: boolean }>(r));
+export const deleteDoc = (no: string) => send("DELETE", `/api/docs/${no}`).then((r) => json<{ ok: boolean }>(r));
+export const reindex = () => send("POST", "/api/index").then((r) => json<{ stats: IndexStats; retrievers: Retriever[] }>(r));

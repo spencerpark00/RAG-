@@ -10,21 +10,31 @@
                        event: sources (검색 청크) → token (답 조각, 여러 번) → done (최종 정리)
   POST /api/feedback   {"question", "answer", "rating": "up"|"down"} → feedback.jsonl에 추가
 
+  문서 관리 (indexer.py)
+  GET    /api/docs              문서 목록 + 색인 상태
+  GET    /api/docs/{no}         원문 + 청크 미리보기
+  POST   /api/docs              업로드 {"title", "content", "doc_id", "status", "effective"}
+  PATCH  /api/docs/{no}         {"status", "effective", "excluded"} → doc_overrides.json
+  DELETE /api/docs/{no}         업로드 문서 삭제
+  POST   /api/index             재색인 (바뀐 청크만 임베딩) → 검색기 다시 로딩
+
 실행: python server.py   →  http://localhost:8000
 """
 import json
+import threading
 import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from answer import DEFAULT_PROMPT, MODEL, TOP_K, build_messages, final_answer, stream_ollama
+import indexer
 from retrieve import EMBEDDINGS_PATH, RETRIEVERS, load_chunks, make_retriever
 
 ROOT = Path(__file__).parent
@@ -36,16 +46,44 @@ app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 if (DIST / "assets").exists():
     app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
 
-# 검색기는 서버 시작 때 한 번 만든다 (BM25 색인·벡터 로딩 비용을 질문마다 내지 않도록)
-CHUNKS = load_chunks()
-AVAILABLE = [m for m in RETRIEVERS if m == "bm25" or EMBEDDINGS_PATH.exists()]
-RETRIEVER_OBJS = {m: make_retriever(m, CHUNKS) for m in AVAILABLE}
-DEFAULT_RETRIEVER = "hybrid" if "hybrid" in AVAILABLE else "bm25"
+# 검색기는 서버 시작 때(그리고 재색인 직후) 한 번 만든다 (BM25 색인·벡터 로딩 비용을 질문마다 내지 않도록)
+CHUNKS, AVAILABLE, RETRIEVER_OBJS, DEFAULT_RETRIEVER = [], [], {}, "bm25"
+INDEX_LOCK = threading.Lock()
+
+
+def load_retrievers():
+    global CHUNKS, AVAILABLE, RETRIEVER_OBJS, DEFAULT_RETRIEVER
+    chunks = load_chunks()
+    vectors_ok = False
+    if EMBEDDINGS_PATH.exists():
+        ids = set(json.loads(EMBEDDINGS_PATH.read_text(encoding="utf-8"))["vectors"])
+        vectors_ok = all(c["chunk_id"] in ids for c in chunks)  # 청크와 벡터가 어긋나면 벡터 검색을 끈다
+    available = [m for m in RETRIEVERS if m == "bm25" or vectors_ok]
+    objs = {m: make_retriever(m, chunks) for m in available}
+    CHUNKS, AVAILABLE, RETRIEVER_OBJS = chunks, available, objs  # 한 번에 교체 → 진행 중인 질문은 이전 검색기로 끝남
+    DEFAULT_RETRIEVER = "hybrid" if "hybrid" in available else "bm25"
+
+
+load_retrievers()
 
 
 class ChatRequest(BaseModel):
     question: str
     retriever: str | None = None
+
+
+class DocUpload(BaseModel):
+    title: str
+    content: str
+    doc_id: str = ""
+    status: str = "미표기"
+    effective: str = ""
+
+
+class DocPatch(BaseModel):
+    status: str | None = None
+    effective: str | None = None
+    excluded: bool | None = None
 
 
 class Feedback(BaseModel):
@@ -90,12 +128,13 @@ def health():
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
-    mode = req.retriever if req.retriever in RETRIEVER_OBJS else DEFAULT_RETRIEVER
+    objs = RETRIEVER_OBJS  # 재색인으로 교체되더라도 이 질문은 같은 검색기로 끝내도록 잡아 둔다
+    mode = req.retriever if req.retriever in objs else DEFAULT_RETRIEVER
 
     def events():
         start = time.time()
         try:
-            chunks = RETRIEVER_OBJS[mode].search(req.question, k=TOP_K)
+            chunks = objs[mode].search(req.question, k=TOP_K)
             yield sse("sources", {"retriever": mode, "chunks": [chunk_view(c) for c in chunks],
                                   "search_ms": int((time.time() - start) * 1000)})
             text = ""
@@ -122,6 +161,63 @@ def feedback(fb: Feedback):
     with FEEDBACK_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
     return {"ok": True}
+
+
+# ---------------- 문서 관리 ----------------
+
+@app.get("/api/docs")
+def docs_list():
+    return {"docs": indexer.list_docs(), "index": indexer.index_status(), "retrievers": AVAILABLE}
+
+
+@app.get("/api/docs/{doc_no}")
+def docs_detail(doc_no: str):
+    d = indexer.doc_detail(doc_no)
+    if not d:
+        raise HTTPException(404, "문서를 찾을 수 없습니다")
+    return d
+
+
+@app.post("/api/docs")
+def docs_upload(body: DocUpload):
+    if not body.content.strip():
+        raise HTTPException(400, "본문이 비어 있습니다")
+    try:
+        return {"doc_no": indexer.add_upload(body.title, body.content, body.doc_id, body.status, body.effective)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.patch("/api/docs/{doc_no}")
+def docs_patch(doc_no: str, body: DocPatch):
+    try:
+        indexer.set_override(doc_no, body.status, body.effective, body.excluded)
+    except KeyError:
+        raise HTTPException(404, "문서를 찾을 수 없습니다")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.delete("/api/docs/{doc_no}")
+def docs_delete(doc_no: str):
+    try:
+        indexer.delete_upload(doc_no)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/index")
+def reindex():
+    if not INDEX_LOCK.acquire(blocking=False):
+        raise HTTPException(409, "이미 색인 중입니다")
+    try:
+        stats = indexer.build_index()
+        load_retrievers()
+        return {"stats": stats, "retrievers": AVAILABLE}
+    finally:
+        INDEX_LOCK.release()
 
 
 if __name__ == "__main__":

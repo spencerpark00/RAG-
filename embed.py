@@ -37,13 +37,15 @@ def embed_texts(texts, model=EMBED_MODEL, timeout=600):
 def main():
     chunks = load_chunks()
     start = time.time()
+    from indexer import text_hash
     vectors = {}
     for i in range(0, len(chunks), BATCH):
         batch = chunks[i:i + BATCH]
         for c, v in zip(batch, embed_texts([c["text"] for c in batch])):
             vectors[c["chunk_id"]] = [round(x, 6) for x in v]
         print(f"{min(i + BATCH, len(chunks))}/{len(chunks)}", end="\r", flush=True)
-    OUT_PATH.write_text(json.dumps({"model": EMBED_MODEL, "vectors": vectors}), encoding="utf-8")
+    hashes = {c["chunk_id"]: text_hash(c["text"]) for c in chunks}  # indexer.py 증분 색인이 재사용 판단에 씀
+    OUT_PATH.write_text(json.dumps({"model": EMBED_MODEL, "vectors": vectors, "hashes": hashes}), encoding="utf-8")
     dim = len(next(iter(vectors.values())))
     print(f"청크 {len(vectors)}개 → {dim}차원 벡터, {time.time() - start:.0f}초. 저장: {OUT_PATH.name}")
 
